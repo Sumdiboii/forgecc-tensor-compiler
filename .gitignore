@@ -1,0 +1,36 @@
+# Build output
+/build/
+/out/
+/cmake-build-*/
+
+# Compiled artifacts
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# CMake and compiler output
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json
+Makefile
+*.d
+
+# Benchmark output
+/benchmarks/results/*
+!/benchmarks/results/.gitkeep
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
