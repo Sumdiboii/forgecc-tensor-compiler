@@ -2,9 +2,12 @@ cmake_minimum_required(VERSION 3.20)
 
 project(ForgeCC VERSION 0.1.0 LANGUAGES CXX)
 
-add_library(forgecc INTERFACE)
-target_compile_features(forgecc INTERFACE cxx_std_20)
-target_include_directories(forgecc INTERFACE
+add_library(forgecc STATIC
+    src/common/diagnostic.cpp
+    src/frontend/lexer.cpp
+)
+target_compile_features(forgecc PUBLIC cxx_std_20)
+target_include_directories(forgecc PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
