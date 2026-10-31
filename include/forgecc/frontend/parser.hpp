@@ -5,6 +5,7 @@
 #include "forgecc/frontend/token.hpp"
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@ public:
     [[nodiscard]] ExpressionPtr parse();
     [[nodiscard]] StatementPtr parseStatement();
     [[nodiscard]] StatementPtr parseDeclaration();
+    [[nodiscard]] std::unique_ptr<Program> parseProgram();
     [[nodiscard]] const common::DiagnosticEngine& diagnostics() const;
 
 private:
@@ -34,7 +36,10 @@ private:
                                           common::SourceLocation location);
     [[nodiscard]] ExpressionPtr parseNumber();
     [[nodiscard]] ExpressionPtr parseParenthesized();
+    [[nodiscard]] StatementPtr parseStatementBody();
     [[nodiscard]] StatementPtr parseAssignment();
+    [[nodiscard]] StatementPtr parseAssignmentBody();
+    [[nodiscard]] StatementPtr parseDeclarationBody();
     void reportError(common::SourceLocation location, std::string message);
 
     std::vector<Token> tokens_;

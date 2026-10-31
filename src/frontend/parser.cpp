@@ -22,18 +22,38 @@ ExpressionPtr Parser::parse() {
 }
 
 StatementPtr Parser::parseStatement() {
-    if (currentToken().kind == TokenKind::Identifier &&
-        peekToken(1).kind == TokenKind::Equal) {
-        return parseAssignment();
+    StatementPtr statement = parseStatementBody();
+    if (!statement) {
+        return nullptr;
     }
 
-    if (currentToken().kind == TokenKind::Identifier &&
-        peekToken(1).kind == TokenKind::Colon) {
-        return parseDeclaration();
+    if (!atEnd()) {
+        reportError(currentToken().location, "unexpected token after statement");
+        return nullptr;
     }
 
-    reportError(currentToken().location, "expected assignment or tensor declaration");
-    return nullptr;
+    return statement;
+}
+
+std::unique_ptr<Program> Parser::parseProgram() {
+    auto program = std::make_unique<Program>();
+
+    while (!atEnd()) {
+        const common::SourceLocation statementLocation = currentToken().location;
+        StatementPtr statement = parseStatementBody();
+        if (!statement) {
+            return nullptr;
+        }
+        program->statements.push_back(std::move(statement));
+
+        if (!atEnd() && currentToken().location.line <= statementLocation.line) {
+            reportError(currentToken().location,
+                        "expected a new line before the next statement");
+            return nullptr;
+        }
+    }
+
+    return program;
 }
 
 const common::DiagnosticEngine& Parser::diagnostics() const {
@@ -213,11 +233,8 @@ ExpressionPtr Parser::parseParenthesized() {
 }
 
 StatementPtr Parser::parseAssignment() {
-    const Token targetToken = advance();
-    advance();
-
-    ExpressionPtr value = parseExpression();
-    if (!value) {
+    StatementPtr statement = parseAssignmentBody();
+    if (!statement) {
         return nullptr;
     }
 
@@ -226,11 +243,52 @@ StatementPtr Parser::parseAssignment() {
         return nullptr;
     }
 
+    return statement;
+}
+
+StatementPtr Parser::parseAssignmentBody() {
+    const Token targetToken = advance();
+    advance();
+
+    ExpressionPtr value = parseExpression();
+    if (!value) {
+        return nullptr;
+    }
+
     return std::make_unique<AssignmentStatement>(targetToken.lexeme, std::move(value),
                                                  targetToken.location);
 }
 
 StatementPtr Parser::parseDeclaration() {
+    StatementPtr statement = parseDeclarationBody();
+    if (!statement) {
+        return nullptr;
+    }
+
+    if (!atEnd()) {
+        reportError(currentToken().location, "unexpected token after tensor declaration");
+        return nullptr;
+    }
+
+    return statement;
+}
+
+StatementPtr Parser::parseStatementBody() {
+    if (currentToken().kind == TokenKind::Identifier &&
+        peekToken(1).kind == TokenKind::Equal) {
+        return parseAssignmentBody();
+    }
+
+    if (currentToken().kind == TokenKind::Identifier &&
+        peekToken(1).kind == TokenKind::Colon) {
+        return parseDeclarationBody();
+    }
+
+    reportError(currentToken().location, "expected assignment or tensor declaration");
+    return nullptr;
+}
+
+StatementPtr Parser::parseDeclarationBody() {
     if (currentToken().kind != TokenKind::Identifier) {
         reportError(currentToken().location, "expected tensor declaration identifier");
         return nullptr;
@@ -287,11 +345,6 @@ StatementPtr Parser::parseDeclaration() {
             reportError(currentToken().location, "expected ',' or ']' after tensor dimension");
             return nullptr;
         }
-    }
-
-    if (!atEnd()) {
-        reportError(currentToken().location, "unexpected token after tensor declaration");
-        return nullptr;
     }
 
     return std::make_unique<TensorDeclarationStatement>(

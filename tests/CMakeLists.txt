@@ -6,6 +6,7 @@ add_executable(forgecc_tests
     unit/frontend/part2_parser_test.cpp
     unit/frontend/program_ast_test.cpp
     unit/frontend/declaration_parser_test.cpp
+    unit/frontend/program_parser_test.cpp
     unit/test_main.cpp
 )
 target_link_libraries(forgecc_tests PRIVATE forgecc)
