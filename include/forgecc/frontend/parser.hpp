@@ -16,6 +16,7 @@ public:
 
     [[nodiscard]] ExpressionPtr parse();
     [[nodiscard]] StatementPtr parseStatement();
+    [[nodiscard]] StatementPtr parseDeclaration();
     [[nodiscard]] const common::DiagnosticEngine& diagnostics() const;
 
 private:

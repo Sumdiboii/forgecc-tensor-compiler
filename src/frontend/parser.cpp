@@ -1,5 +1,6 @@
 #include "forgecc/frontend/parser.hpp"
 
+#include <charconv>
 #include <utility>
 
 namespace forgecc::frontend {
@@ -26,7 +27,12 @@ StatementPtr Parser::parseStatement() {
         return parseAssignment();
     }
 
-    reportError(currentToken().location, "expected assignment statement");
+    if (currentToken().kind == TokenKind::Identifier &&
+        peekToken(1).kind == TokenKind::Colon) {
+        return parseDeclaration();
+    }
+
+    reportError(currentToken().location, "expected assignment or tensor declaration");
     return nullptr;
 }
 
@@ -222,6 +228,74 @@ StatementPtr Parser::parseAssignment() {
 
     return std::make_unique<AssignmentStatement>(targetToken.lexeme, std::move(value),
                                                  targetToken.location);
+}
+
+StatementPtr Parser::parseDeclaration() {
+    if (currentToken().kind != TokenKind::Identifier) {
+        reportError(currentToken().location, "expected tensor declaration identifier");
+        return nullptr;
+    }
+
+    const Token nameToken = advance();
+    if (!match(TokenKind::Colon)) {
+        reportError(currentToken().location, "expected ':' after tensor name");
+        return nullptr;
+    }
+
+    if (currentToken().kind != TokenKind::Identifier) {
+        reportError(currentToken().location, "expected tensor element type");
+        return nullptr;
+    }
+
+    const Token elementTypeToken = advance();
+    if (elementTypeToken.lexeme != "f32") {
+        reportError(elementTypeToken.location, "unsupported tensor element type");
+        return nullptr;
+    }
+
+    if (!match(TokenKind::LeftBracket)) {
+        reportError(currentToken().location, "expected '[' after tensor element type");
+        return nullptr;
+    }
+
+    std::vector<std::size_t> dimensions;
+    while (true) {
+        if (currentToken().kind != TokenKind::IntegerLiteral) {
+            reportError(currentToken().location, "expected integer tensor dimension");
+            return nullptr;
+        }
+
+        const Token dimensionToken = advance();
+        std::size_t dimension = 0;
+        const auto conversion = std::from_chars(dimensionToken.lexeme.data(),
+                                                 dimensionToken.lexeme.data() +
+                                                     dimensionToken.lexeme.size(),
+                                                 dimension);
+        if (conversion.ec != std::errc{} || conversion.ptr !=
+                                                 dimensionToken.lexeme.data() +
+                                                     dimensionToken.lexeme.size()) {
+            reportError(dimensionToken.location, "tensor dimension is out of range");
+            return nullptr;
+        }
+        dimensions.push_back(dimension);
+
+        if (match(TokenKind::RightBracket)) {
+            break;
+        }
+
+        if (!match(TokenKind::Comma)) {
+            reportError(currentToken().location, "expected ',' or ']' after tensor dimension");
+            return nullptr;
+        }
+    }
+
+    if (!atEnd()) {
+        reportError(currentToken().location, "unexpected token after tensor declaration");
+        return nullptr;
+    }
+
+    return std::make_unique<TensorDeclarationStatement>(
+        nameToken.lexeme, elementTypeToken.lexeme, std::move(dimensions), nameToken.location);
 }
 
 void Parser::reportError(common::SourceLocation location, std::string message) {
