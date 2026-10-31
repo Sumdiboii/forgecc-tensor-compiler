@@ -4,6 +4,7 @@ add_executable(forgecc_tests
     unit/frontend/lexer_test.cpp
     unit/frontend/parser_test.cpp
     unit/frontend/part2_parser_test.cpp
+    unit/frontend/program_ast_test.cpp
     unit/test_main.cpp
 )
 target_link_libraries(forgecc_tests PRIVATE forgecc)

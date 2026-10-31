@@ -104,6 +104,7 @@ public:
 
 enum class StatementKind {
     Assignment,
+    TensorDeclaration,
 };
 
 class Statement {
@@ -138,6 +139,28 @@ public:
 
     std::string target;
     ExpressionPtr value;
+};
+
+class TensorDeclarationStatement final : public Statement {
+public:
+    TensorDeclarationStatement(std::string name, std::string elementType,
+                               std::vector<std::size_t> dimensions,
+                               common::SourceLocation location)
+        : Statement(StatementKind::TensorDeclaration, location), name(std::move(name)),
+          elementType(std::move(elementType)), dimensions(std::move(dimensions)) {}
+
+    std::string name;
+    std::string elementType;
+    std::vector<std::size_t> dimensions;
+};
+
+class Program {
+public:
+    Program() = default;
+    explicit Program(std::vector<StatementPtr> statements)
+        : statements(std::move(statements)) {}
+
+    std::vector<StatementPtr> statements;
 };
 
 } // namespace forgecc::frontend
