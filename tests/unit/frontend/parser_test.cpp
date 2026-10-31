@@ -87,9 +87,11 @@ void testLocations() {
     Parser parser = makeParser("\n  relu(A)");
     auto expression = parser.parse();
     assert(expression);
-    assert(expression->location() == SourceLocation(2, 3));
+    const SourceLocation callLocation{2, 3};
+    assert(expression->location() == callLocation);
     const auto& call = static_cast<const CallExpression&>(*expression);
-    assert(call.arguments[0]->location() == SourceLocation(2, 8));
+    const SourceLocation argumentLocation{2, 8};
+    assert(call.arguments[0]->location() == argumentLocation);
 }
 
 void testParseErrors() {
@@ -104,7 +106,8 @@ void testParseErrors() {
 
     Parser unmatchedParser = makeParser("(A");
     assert(!unmatchedParser.parse());
-    assert(unmatchedParser.diagnostics().diagnostics().front().location == SourceLocation(1, 3));
+    const SourceLocation errorLocation{1, 3};
+    assert(unmatchedParser.diagnostics().diagnostics().front().location == errorLocation);
 }
 
 } // namespace

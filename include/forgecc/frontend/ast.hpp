@@ -14,6 +14,7 @@ enum class ExpressionKind {
     NumericLiteral,
     Parenthesized,
     Call,
+    Binary,
 };
 
 class Expression {
@@ -80,6 +81,63 @@ public:
 
     std::string callee;
     std::vector<ExpressionPtr> arguments;
+};
+
+enum class BinaryOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+};
+
+class BinaryExpression final : public Expression {
+public:
+    BinaryExpression(BinaryOperator operation, ExpressionPtr left, ExpressionPtr right,
+                     common::SourceLocation location)
+        : Expression(ExpressionKind::Binary, location), operation(operation),
+          left(std::move(left)), right(std::move(right)) {}
+
+    BinaryOperator operation;
+    ExpressionPtr left;
+    ExpressionPtr right;
+};
+
+enum class StatementKind {
+    Assignment,
+};
+
+class Statement {
+public:
+    virtual ~Statement() = default;
+
+    [[nodiscard]] StatementKind kind() const {
+        return kind_;
+    }
+
+    [[nodiscard]] common::SourceLocation location() const {
+        return location_;
+    }
+
+protected:
+    Statement(StatementKind kind, common::SourceLocation location)
+        : kind_(kind), location_(location) {}
+
+private:
+    StatementKind kind_;
+    common::SourceLocation location_;
+};
+
+using StatementPtr = std::unique_ptr<Statement>;
+
+class AssignmentStatement final : public Statement {
+public:
+    AssignmentStatement(std::string target, ExpressionPtr value,
+                        common::SourceLocation location)
+        : Statement(StatementKind::Assignment, location), target(std::move(target)),
+          value(std::move(value)) {}
+
+    std::string target;
+    ExpressionPtr value;
 };
 
 } // namespace forgecc::frontend
