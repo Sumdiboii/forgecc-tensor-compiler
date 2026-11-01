@@ -9,6 +9,7 @@ add_executable(forgecc_tests
     unit/frontend/program_parser_test.cpp
     unit/semantic/type_and_symbol_table_test.cpp
     unit/semantic/semantic_analyzer_test.cpp
+    unit/ir/graph_test.cpp
     unit/test_main.cpp
 )
 target_link_libraries(forgecc_tests PRIVATE forgecc)
