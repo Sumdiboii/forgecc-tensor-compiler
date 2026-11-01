@@ -8,6 +8,7 @@ void runPart2ParserTests();
 void runProgramAstTests();
 void runDeclarationParserTests();
 void runProgramParserTests();
+void runTypeAndSymbolTableTests();
 
 int main() {
     runDiagnosticTests();
@@ -18,5 +19,6 @@ int main() {
     runProgramAstTests();
     runDeclarationParserTests();
     runProgramParserTests();
+    runTypeAndSymbolTableTests();
     std::cout << "ForgeCC unit tests passed\n";
 }
