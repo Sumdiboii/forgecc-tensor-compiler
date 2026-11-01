@@ -1,0 +1,43 @@
+[1mdiff --git a/CMakeLists.txt b/CMakeLists.txt[m
+[1mindex daa259f..a1e0070 100644[m
+[1m--- a/CMakeLists.txt[m
+[1m+++ b/CMakeLists.txt[m
+[36m@@ -6,6 +6,7 @@[m [madd_library(forgecc STATIC[m
+     src/common/diagnostic.cpp[m
+     src/frontend/lexer.cpp[m
+     src/frontend/parser.cpp[m
+[32m+[m[32m    src/semantic/symbol_table.cpp[m
+ )[m
+ target_compile_features(forgecc PUBLIC cxx_std_20)[m
+ target_include_directories(forgecc PUBLIC[m
+[1mdiff --git a/tests/CMakeLists.txt b/tests/CMakeLists.txt[m
+[1mindex f16151d..e68a85a 100644[m
+[1m--- a/tests/CMakeLists.txt[m
+[1m+++ b/tests/CMakeLists.txt[m
+[36m@@ -7,6 +7,7 @@[m [madd_executable(forgecc_tests[m
+     unit/frontend/program_ast_test.cpp[m
+     unit/frontend/declaration_parser_test.cpp[m
+     unit/frontend/program_parser_test.cpp[m
+[32m+[m[32m    unit/semantic/type_and_symbol_table_test.cpp[m
+     unit/test_main.cpp[m
+ )[m
+ target_link_libraries(forgecc_tests PRIVATE forgecc)[m
+[1mdiff --git a/tests/unit/test_main.cpp b/tests/unit/test_main.cpp[m
+[1mindex 87daa9e..c5afaa9 100644[m
+[1m--- a/tests/unit/test_main.cpp[m
+[1m+++ b/tests/unit/test_main.cpp[m
+[36m@@ -8,6 +8,7 @@[m [mvoid runPart2ParserTests();[m
+ void runProgramAstTests();[m
+ void runDeclarationParserTests();[m
+ void runProgramParserTests();[m
+[32m+[m[32mvoid runTypeAndSymbolTableTests();[m
+ [m
+ int main() {[m
+     runDiagnosticTests();[m
+[36m@@ -18,5 +19,6 @@[m [mint main() {[m
+     runProgramAstTests();[m
+     runDeclarationParserTests();[m
+     runProgramParserTests();[m
+[32m+[m[32m    runTypeAndSymbolTableTests();[m
+     std::cout << "ForgeCC unit tests passed\n";[m
+ }[m
