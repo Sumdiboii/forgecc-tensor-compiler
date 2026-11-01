@@ -13,6 +13,7 @@ public:
     [[nodiscard]] ValueId addInput(std::string name, semantic::TensorType type);
     [[nodiscard]] NodeId addNode(OperationKind operation, std::vector<ValueId> inputs,
                                   semantic::TensorType outputType);
+    void setValueName(ValueId id, std::string name);
 
     [[nodiscard]] const Value& value(ValueId id) const;
     [[nodiscard]] const Node& node(NodeId id) const;

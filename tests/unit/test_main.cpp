@@ -11,6 +11,7 @@ void runProgramParserTests();
 void runTypeAndSymbolTableTests();
 void runSemanticAnalyzerTests();
 void runGraphTests();
+void runLowererTests();
 
 int main() {
     runDiagnosticTests();
@@ -24,5 +25,6 @@ int main() {
     runTypeAndSymbolTableTests();
     runSemanticAnalyzerTests();
     runGraphTests();
+    runLowererTests();
     std::cout << "ForgeCC unit tests passed\n";
 }

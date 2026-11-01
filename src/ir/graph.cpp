@@ -21,6 +21,10 @@ NodeId Graph::addNode(OperationKind operation, std::vector<ValueId> inputs,
     return id;
 }
 
+void Graph::setValueName(ValueId id, std::string name) {
+    values_.at(id).name = std::move(name);
+}
+
 const Value& Graph::value(ValueId id) const {
     return values_.at(id);
 }
