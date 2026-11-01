@@ -6,6 +6,7 @@ add_library(forgecc STATIC
     src/common/diagnostic.cpp
     src/frontend/lexer.cpp
     src/frontend/parser.cpp
+    src/frontend/semantic_analyzer.cpp
     src/semantic/symbol_table.cpp
 )
 target_compile_features(forgecc PUBLIC cxx_std_20)
