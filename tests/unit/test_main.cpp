@@ -2,6 +2,7 @@
 
 void runDiagnosticTests();
 void runSourceLocationTests();
+void runCppEmitterTests();
 void runLexerTests();
 void runParserTests();
 void runPart2ParserTests();
@@ -19,6 +20,7 @@ void runCommonSubexpressionEliminationTests();
 int main() {
     runDiagnosticTests();
     runSourceLocationTests();
+    runCppEmitterTests();
     runLexerTests();
     runParserTests();
     runPart2ParserTests();

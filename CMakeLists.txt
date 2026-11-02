@@ -4,6 +4,7 @@ project(ForgeCC VERSION 0.1.0 LANGUAGES CXX)
 
 add_library(forgecc STATIC
     src/common/diagnostic.cpp
+    src/codegen/cpp_emitter.cpp
     src/frontend/lexer.cpp
     src/frontend/parser.cpp
     src/frontend/semantic_analyzer.cpp
