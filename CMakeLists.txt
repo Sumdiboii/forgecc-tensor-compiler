@@ -9,6 +9,7 @@ add_library(forgecc STATIC
     src/frontend/semantic_analyzer.cpp
     src/ir/graph.cpp
     src/lowering/lowerer.cpp
+    src/optimizer/pass_manager.cpp
     src/semantic/symbol_table.cpp
 )
 target_compile_features(forgecc PUBLIC cxx_std_20)

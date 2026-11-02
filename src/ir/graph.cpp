@@ -1,6 +1,8 @@
 #include "forgecc/ir/graph.hpp"
 
 #include <algorithm>
+#include <functional>
+#include <queue>
 #include <string>
 #include <utility>
 
@@ -152,7 +154,7 @@ bool Graph::validate(common::DiagnosticEngine& diagnostics) const {
 
             const Value& inputValue = values_[input];
             if (inputValue.kind == ValueKind::OperationOutput) {
-                if (!inputValue.producer.has_value() || *inputValue.producer >= index ||
+                if (!inputValue.producer.has_value() || *inputValue.producer >= nodes_.size() ||
                     nodes_[*inputValue.producer].output != input) {
                     report("operation input has an inconsistent producer relationship");
                 }
@@ -166,7 +168,58 @@ bool Graph::validate(common::DiagnosticEngine& diagnostics) const {
         }
     }
 
-    return valid && !diagnostics.hasErrors();
+    return valid;
+}
+
+std::optional<std::vector<NodeId>> Graph::topologicalOrder(
+    common::DiagnosticEngine& diagnostics) const {
+    if (!validate(diagnostics)) {
+        return std::nullopt;
+    }
+
+    std::vector<std::size_t> indegree(nodes_.size(), 0);
+    std::vector<std::vector<NodeId>> consumers(nodes_.size());
+    for (const Node& node : nodes_) {
+        for (ValueId input : node.inputs) {
+            const Value& value = values_[input];
+            if (value.kind != ValueKind::OperationOutput) {
+                continue;
+            }
+
+            const NodeId producer = *value.producer;
+            ++indegree[node.id];
+            consumers[producer].push_back(node.id);
+        }
+    }
+
+    std::priority_queue<NodeId, std::vector<NodeId>, std::greater<NodeId>> ready;
+    for (NodeId id = 0; id < nodes_.size(); ++id) {
+        if (indegree[id] == 0) {
+            ready.push(id);
+        }
+    }
+
+    std::vector<NodeId> order;
+    order.reserve(nodes_.size());
+    while (!ready.empty()) {
+        const NodeId current = ready.top();
+        ready.pop();
+        order.push_back(current);
+
+        for (NodeId consumer : consumers[current]) {
+            --indegree[consumer];
+            if (indegree[consumer] == 0) {
+                ready.push(consumer);
+            }
+        }
+    }
+
+    if (order.size() != nodes_.size()) {
+        diagnostics.reportError({1, 1}, "computation graph contains a cycle");
+        return std::nullopt;
+    }
+
+    return order;
 }
 
 std::string Graph::dump() const {

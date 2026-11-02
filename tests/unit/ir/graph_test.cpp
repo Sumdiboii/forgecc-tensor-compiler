@@ -114,6 +114,36 @@ void testGraphDumpIsReadableAndDeterministic() {
     assert(firstDump.find("%3 = out") != std::string::npos);
 }
 
+void testTopologicalOrderIsDeterministicAndDependencyRespecting() {
+    Graph graph;
+    static_cast<void>(graph.addInput("A", matrix(2, 2)));
+    static_cast<void>(graph.addInput("B", matrix(2, 2)));
+    const auto laterOutput = graph.addNode(OperationKind::Relu, {3}, matrix(2, 2));
+    const auto earlierOutput = graph.addNode(OperationKind::Relu, {0}, matrix(2, 2));
+    graph.addOutput(graph.node(laterOutput).output);
+    graph.addOutput(graph.node(earlierOutput).output);
+
+    forgecc::common::DiagnosticEngine diagnostics;
+    const auto order = graph.topologicalOrder(diagnostics);
+    assert(order.has_value());
+    assert(*order == std::vector<forgecc::ir::NodeId>({1, 0}));
+    assert(!diagnostics.hasErrors());
+}
+
+void testTopologicalOrderDetectsCycles() {
+    Graph graph;
+    static_cast<void>(graph.addInput("A", matrix(2, 2)));
+    static_cast<void>(graph.addInput("B", matrix(2, 2)));
+    const auto first = graph.addNode(OperationKind::Relu, {3}, matrix(2, 2));
+    const auto second = graph.addNode(OperationKind::Relu, {graph.node(first).output},
+                                      matrix(2, 2));
+    static_cast<void>(second);
+
+    forgecc::common::DiagnosticEngine diagnostics;
+    assert(!graph.topologicalOrder(diagnostics).has_value());
+    assert(diagnostics.hasErrors());
+}
+
 } // namespace
 
 void runGraphTests() {
@@ -124,4 +154,6 @@ void runGraphTests() {
     testInvalidNodeInputFailsValidation();
     testInvalidOperationArityFailsValidation();
     testGraphDumpIsReadableAndDeterministic();
+    testTopologicalOrderIsDeterministicAndDependencyRespecting();
+    testTopologicalOrderDetectsCycles();
 }
