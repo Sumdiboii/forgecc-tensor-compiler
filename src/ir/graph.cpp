@@ -1,6 +1,8 @@
 #include "forgecc/ir/graph.hpp"
 
 #include <algorithm>
+#include <functional>
+#include <queue>
 #include <string>
 #include <utility>
 
@@ -61,7 +63,7 @@ NodeId Graph::addNode(OperationKind operation, std::vector<ValueId> inputs,
     const ValueId output = values_.size();
     values_.push_back(
         Value{output, ValueKind::OperationOutput, {}, std::move(outputType), id});
-    nodes_.push_back(Node{id, operation, std::move(inputs), output});
+    nodes_.push_back(Node{id, operation, std::move(inputs), output, true});
     return id;
 }
 
@@ -84,12 +86,17 @@ const Node& Graph::node(NodeId id) const {
     return nodes_.at(id);
 }
 
+bool Graph::isNodeLive(NodeId id) const {
+    return nodes_.at(id).isLive;
+}
+
 std::size_t Graph::valueCount() const {
     return values_.size();
 }
 
 std::size_t Graph::nodeCount() const {
-    return nodes_.size();
+    return static_cast<std::size_t>(std::count_if(
+        nodes_.begin(), nodes_.end(), [](const Node& node) { return node.isLive; }));
 }
 
 const std::vector<ValueId>& Graph::outputs() const {
@@ -118,6 +125,8 @@ bool Graph::validate(common::DiagnosticEngine& diagnostics) const {
                 report("operation output is missing its producer");
             } else if (*value.producer >= nodes_.size()) {
                 report("operation output refers to an invalid producer node");
+            } else if (!nodes_[*value.producer].isLive) {
+                continue;
             } else if (nodes_[*value.producer].output != value.id) {
                 report("operation output producer does not reference the value");
             }
@@ -126,6 +135,9 @@ bool Graph::validate(common::DiagnosticEngine& diagnostics) const {
 
     for (std::size_t index = 0; index < nodes_.size(); ++index) {
         const Node& node = nodes_[index];
+        if (!node.isLive) {
+            continue;
+        }
         if (node.id != index) {
             report("node ID does not match its position in the graph");
         }
@@ -152,7 +164,8 @@ bool Graph::validate(common::DiagnosticEngine& diagnostics) const {
 
             const Value& inputValue = values_[input];
             if (inputValue.kind == ValueKind::OperationOutput) {
-                if (!inputValue.producer.has_value() || *inputValue.producer >= index ||
+                if (!inputValue.producer.has_value() || *inputValue.producer >= nodes_.size() ||
+                    !nodes_[*inputValue.producer].isLive ||
                     nodes_[*inputValue.producer].output != input) {
                     report("operation input has an inconsistent producer relationship");
                 }
@@ -163,10 +176,107 @@ bool Graph::validate(common::DiagnosticEngine& diagnostics) const {
     for (ValueId output : outputs_) {
         if (output >= values_.size()) {
             report("graph output refers to an invalid value");
+        } else if (values_[output].kind == ValueKind::OperationOutput &&
+                   (!values_[output].producer.has_value() ||
+                    *values_[output].producer >= nodes_.size() ||
+                    !nodes_[*values_[output].producer].isLive)) {
+            report("graph output refers to a removed node result");
         }
     }
 
-    return valid && !diagnostics.hasErrors();
+    return valid;
+}
+
+std::optional<std::vector<NodeId>> Graph::topologicalOrder(
+    common::DiagnosticEngine& diagnostics) const {
+    if (!validate(diagnostics)) {
+        return std::nullopt;
+    }
+
+    std::vector<std::size_t> indegree(nodes_.size(), 0);
+    std::vector<std::vector<NodeId>> consumers(nodes_.size());
+    for (const Node& node : nodes_) {
+        if (!node.isLive) {
+            continue;
+        }
+        for (ValueId input : node.inputs) {
+            const Value& value = values_[input];
+            if (value.kind != ValueKind::OperationOutput) {
+                continue;
+            }
+
+            const NodeId producer = *value.producer;
+            ++indegree[node.id];
+            consumers[producer].push_back(node.id);
+        }
+    }
+
+    std::priority_queue<NodeId, std::vector<NodeId>, std::greater<NodeId>> ready;
+    for (NodeId id = 0; id < nodes_.size(); ++id) {
+        if (nodes_[id].isLive && indegree[id] == 0) {
+            ready.push(id);
+        }
+    }
+
+    std::vector<NodeId> order;
+    order.reserve(nodes_.size());
+    while (!ready.empty()) {
+        const NodeId current = ready.top();
+        ready.pop();
+        order.push_back(current);
+
+        for (NodeId consumer : consumers[current]) {
+            --indegree[consumer];
+            if (indegree[consumer] == 0) {
+                ready.push(consumer);
+            }
+        }
+    }
+
+    if (order.size() != nodeCount()) {
+        diagnostics.reportError({1, 1}, "computation graph contains a cycle");
+        return std::nullopt;
+    }
+
+    return order;
+}
+
+bool Graph::replaceValueInConsumers(ValueId from, ValueId to) {
+    static_cast<void>(value(from));
+    static_cast<void>(value(to));
+
+    bool changed = false;
+    for (Node& node : nodes_) {
+        if (!node.isLive) {
+            continue;
+        }
+        for (ValueId& input : node.inputs) {
+            if (input == from) {
+                input = to;
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
+bool Graph::keepOnlyNodes(const std::vector<NodeId>& liveNodes) {
+    std::vector<bool> keep(nodes_.size(), false);
+    for (NodeId id : liveNodes) {
+        if (id >= nodes_.size()) {
+            return false;
+        }
+        keep[id] = true;
+    }
+
+    bool changed = false;
+    for (std::size_t index = 0; index < nodes_.size(); ++index) {
+        if (nodes_[index].isLive && !keep[index]) {
+            nodes_[index].isLive = false;
+            changed = true;
+        }
+    }
+    return changed;
 }
 
 std::string Graph::dump() const {
@@ -181,6 +291,9 @@ std::string Graph::dump() const {
 
     result += "\nNodes:\n";
     for (const Node& node : nodes_) {
+        if (!node.isLive) {
+            continue;
+        }
         result += "node" + std::to_string(node.id) + " = " + operationName(node.operation) + "(";
         for (std::size_t index = 0; index < node.inputs.size(); ++index) {
             if (index != 0) {

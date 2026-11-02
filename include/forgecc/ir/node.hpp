@@ -16,6 +16,7 @@ struct Node {
     OperationKind operation;
     std::vector<ValueId> inputs;
     ValueId output;
+    bool isLive = true;
 };
 
 } // namespace forgecc::ir

@@ -12,6 +12,9 @@ void runTypeAndSymbolTableTests();
 void runSemanticAnalyzerTests();
 void runGraphTests();
 void runLowererTests();
+void runPassManagerTests();
+void runDeadCodeEliminationTests();
+void runCommonSubexpressionEliminationTests();
 
 int main() {
     runDiagnosticTests();
@@ -26,5 +29,8 @@ int main() {
     runSemanticAnalyzerTests();
     runGraphTests();
     runLowererTests();
+    runPassManagerTests();
+    runDeadCodeEliminationTests();
+    runCommonSubexpressionEliminationTests();
     std::cout << "ForgeCC unit tests passed\n";
 }
