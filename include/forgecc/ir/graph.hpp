@@ -20,12 +20,14 @@ public:
 
     [[nodiscard]] const Value& value(ValueId id) const;
     [[nodiscard]] const Node& node(NodeId id) const;
+    [[nodiscard]] bool isNodeLive(NodeId id) const;
     [[nodiscard]] std::size_t valueCount() const;
     [[nodiscard]] std::size_t nodeCount() const;
     [[nodiscard]] const std::vector<ValueId>& outputs() const;
     [[nodiscard]] bool validate(common::DiagnosticEngine& diagnostics) const;
     [[nodiscard]] std::optional<std::vector<NodeId>> topologicalOrder(
         common::DiagnosticEngine& diagnostics) const;
+    [[nodiscard]] bool keepOnlyNodes(const std::vector<NodeId>& liveNodes);
     [[nodiscard]] std::string dump() const;
 
 private:
