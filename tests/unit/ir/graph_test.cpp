@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 namespace {
@@ -63,10 +64,64 @@ void testValueAndNodeIdsRemainUsableAsGraphGrows() {
     assert(graph.node(firstNode).inputs[0] == input);
 }
 
+void testValidGraphPassesValidation() {
+    Graph graph;
+    const auto a = graph.addInput("A", matrix(2, 3));
+    const auto b = graph.addInput("B", matrix(3, 4));
+    const auto matmul = graph.addNode(OperationKind::Matmul, {a, b}, matrix(2, 4));
+    graph.setValueName(graph.node(matmul).output, "C");
+    graph.addOutput(graph.node(matmul).output);
+
+    forgecc::common::DiagnosticEngine diagnostics;
+    assert(graph.validate(diagnostics));
+    assert(!diagnostics.hasErrors());
+}
+
+void testInvalidNodeInputFailsValidation() {
+    Graph graph;
+    static_cast<void>(graph.addNode(OperationKind::Relu, {99}, matrix(2, 2)));
+
+    forgecc::common::DiagnosticEngine diagnostics;
+    assert(!graph.validate(diagnostics));
+    assert(diagnostics.hasErrors());
+}
+
+void testInvalidOperationArityFailsValidation() {
+    Graph graph;
+    static_cast<void>(graph.addNode(OperationKind::Relu, {}, matrix(2, 2)));
+
+    forgecc::common::DiagnosticEngine diagnostics;
+    assert(!graph.validate(diagnostics));
+    assert(diagnostics.hasErrors());
+}
+
+void testGraphDumpIsReadableAndDeterministic() {
+    Graph graph;
+    const auto a = graph.addInput("A", matrix(2, 3));
+    const auto b = graph.addInput("B", matrix(3, 4));
+    const auto matmul = graph.addNode(OperationKind::Matmul, {a, b}, matrix(2, 4));
+    const auto relu = graph.addNode(OperationKind::Relu, {graph.node(matmul).output},
+                                    matrix(2, 4));
+    graph.setValueName(graph.node(relu).output, "out");
+    graph.addOutput(graph.node(relu).output);
+
+    const std::string firstDump = graph.dump();
+    assert(firstDump == graph.dump());
+    assert(firstDump.find("A : f32[2, 3]") != std::string::npos);
+    assert(firstDump.find("B : f32[3, 4]") != std::string::npos);
+    assert(firstDump.find("Matmul(%0, %1) -> %2") != std::string::npos);
+    assert(firstDump.find("Relu(%2) -> %3 (out) : f32[2, 4]") != std::string::npos);
+    assert(firstDump.find("%3 = out") != std::string::npos);
+}
+
 } // namespace
 
 void runGraphTests() {
     testGraphInputsAndMatmul();
     testOperationResultConnections();
     testValueAndNodeIdsRemainUsableAsGraphGrows();
+    testValidGraphPassesValidation();
+    testInvalidNodeInputFailsValidation();
+    testInvalidOperationArityFailsValidation();
+    testGraphDumpIsReadableAndDeterministic();
 }

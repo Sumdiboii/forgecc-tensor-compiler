@@ -47,6 +47,7 @@ std::optional<ir::Graph> GraphLowerer::lower(const frontend::Program& program,
         if (graph_.value(*value).kind == ir::ValueKind::OperationOutput) {
             graph_.setValueName(*value, assignment.target);
         }
+        graph_.addOutput(*value);
     }
 
     return std::move(graph_);
