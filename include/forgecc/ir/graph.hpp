@@ -27,6 +27,7 @@ public:
     [[nodiscard]] bool validate(common::DiagnosticEngine& diagnostics) const;
     [[nodiscard]] std::optional<std::vector<NodeId>> topologicalOrder(
         common::DiagnosticEngine& diagnostics) const;
+    [[nodiscard]] bool replaceValueInConsumers(ValueId from, ValueId to);
     [[nodiscard]] bool keepOnlyNodes(const std::vector<NodeId>& liveNodes);
     [[nodiscard]] std::string dump() const;
 

@@ -14,6 +14,7 @@ void runGraphTests();
 void runLowererTests();
 void runPassManagerTests();
 void runDeadCodeEliminationTests();
+void runCommonSubexpressionEliminationTests();
 
 int main() {
     runDiagnosticTests();
@@ -30,5 +31,6 @@ int main() {
     runLowererTests();
     runPassManagerTests();
     runDeadCodeEliminationTests();
+    runCommonSubexpressionEliminationTests();
     std::cout << "ForgeCC unit tests passed\n";
 }

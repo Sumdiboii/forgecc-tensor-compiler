@@ -241,6 +241,25 @@ std::optional<std::vector<NodeId>> Graph::topologicalOrder(
     return order;
 }
 
+bool Graph::replaceValueInConsumers(ValueId from, ValueId to) {
+    static_cast<void>(value(from));
+    static_cast<void>(value(to));
+
+    bool changed = false;
+    for (Node& node : nodes_) {
+        if (!node.isLive) {
+            continue;
+        }
+        for (ValueId& input : node.inputs) {
+            if (input == from) {
+                input = to;
+                changed = true;
+            }
+        }
+    }
+    return changed;
+}
+
 bool Graph::keepOnlyNodes(const std::vector<NodeId>& liveNodes) {
     std::vector<bool> keep(nodes_.size(), false);
     for (NodeId id : liveNodes) {

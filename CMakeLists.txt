@@ -11,6 +11,7 @@ add_library(forgecc STATIC
     src/lowering/lowerer.cpp
     src/optimizer/pass_manager.cpp
     src/optimizer/dead_code_elimination.cpp
+    src/optimizer/common_subexpression_elimination.cpp
     src/semantic/symbol_table.cpp
 )
 target_compile_features(forgecc PUBLIC cxx_std_20)
