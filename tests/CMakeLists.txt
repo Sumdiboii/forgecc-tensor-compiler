@@ -1,6 +1,7 @@
 add_executable(forgecc_tests
     unit/common/diagnostic_test.cpp
     unit/common/source_location_test.cpp
+    unit/codegen/cpp_emitter_test.cpp
     unit/frontend/lexer_test.cpp
     unit/frontend/parser_test.cpp
     unit/frontend/part2_parser_test.cpp
