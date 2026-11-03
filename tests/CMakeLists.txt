@@ -12,6 +12,7 @@ add_executable(forgecc_tests
     unit/semantic/semantic_analyzer_test.cpp
     unit/ir/graph_test.cpp
     unit/lowering/lowerer_test.cpp
+    unit/lowering/loop_ir_test.cpp
     unit/optimizer/pass_manager_test.cpp
     unit/optimizer/dead_code_elimination_test.cpp
     unit/optimizer/common_subexpression_elimination_test.cpp

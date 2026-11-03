@@ -13,6 +13,7 @@ void runTypeAndSymbolTableTests();
 void runSemanticAnalyzerTests();
 void runGraphTests();
 void runLowererTests();
+void runLoopIrTests();
 void runPassManagerTests();
 void runDeadCodeEliminationTests();
 void runCommonSubexpressionEliminationTests();
@@ -31,6 +32,7 @@ int main() {
     runSemanticAnalyzerTests();
     runGraphTests();
     runLowererTests();
+    runLoopIrTests();
     runPassManagerTests();
     runDeadCodeEliminationTests();
     runCommonSubexpressionEliminationTests();
