@@ -1,5 +1,7 @@
 #include "forgecc/codegen/cpp_emitter.hpp"
 
+#include <cctype>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,19 +36,63 @@ std::string shapeInitializer(const semantic::TensorType& type) {
     return result;
 }
 
-std::string elementCount(const semantic::TensorType& type) {
+std::optional<std::size_t> elementCount(const semantic::TensorType& type) {
     std::size_t count = 1;
     for (std::size_t dimension : type.dimensions) {
+        if (dimension != 0 && count > std::numeric_limits<std::size_t>::max() / dimension) {
+            return std::nullopt;
+        }
         count *= dimension;
     }
-    return std::to_string(count);
+    return count;
 }
 
-void emitTensorDeclaration(SourceEmitter& emitter, const std::string& variable,
-                           const semantic::TensorType& type) {
+bool emitTensorDeclaration(SourceEmitter& emitter, const std::string& variable,
+                           const semantic::TensorType& type,
+                           common::DiagnosticEngine& diagnostics) {
+    const std::optional<std::size_t> count = elementCount(type);
+    if (!count.has_value()) {
+        diagnostics.reportError({1, 1}, "tensor shape is too large for generated storage");
+        return false;
+    }
+
     emitter.emitLine("    Tensor " + variable + ";");
     emitter.emitLine("    " + variable + ".shape = " + shapeInitializer(type) + ";");
-    emitter.emitLine("    " + variable + ".data.resize(" + elementCount(type) + ");");
+    emitter.emitLine("    " + variable + ".data.resize(" + std::to_string(*count) + ");");
+    return true;
+}
+
+bool isIdentifier(std::string_view name) {
+    if (name.empty() || (!std::isalpha(static_cast<unsigned char>(name.front())) &&
+                         name.front() != '_')) {
+        return false;
+    }
+    for (char character : name.substr(1)) {
+        if (!std::isalnum(static_cast<unsigned char>(character)) && character != '_') {
+            return false;
+        }
+    }
+
+    constexpr std::string_view keywords[] = {
+        "alignas", "alignof", "and", "and_eq", "asm", "atomic_cancel", "atomic_commit",
+        "atomic_noexcept", "auto", "bitand", "bitor", "bool", "break", "case", "catch",
+        "char", "char8_t", "char16_t", "char32_t", "class", "compl", "concept", "const",
+        "consteval", "constexpr", "constinit", "const_cast", "continue", "co_await",
+        "co_return", "co_yield", "decltype", "default", "delete", "do", "double",
+        "dynamic_cast", "else", "enum", "explicit", "export", "extern", "false", "float",
+        "for", "friend", "goto", "if", "inline", "int", "long", "mutable", "namespace",
+        "new", "noexcept", "not", "not_eq", "nullptr", "operator", "or", "or_eq", "private",
+        "protected", "public", "register", "reinterpret_cast", "requires", "return", "short",
+        "signed", "sizeof", "static", "static_assert", "static_cast", "struct", "switch",
+        "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid",
+        "typename", "union", "unsigned", "using", "virtual", "void", "volatile", "wchar_t",
+        "while", "xor", "xor_eq"};
+    for (std::string_view keyword : keywords) {
+        if (name == keyword) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool reportUnsupportedType(const semantic::TensorType& type,
@@ -74,7 +120,9 @@ bool emitRelu(SourceEmitter& emitter, const ir::Graph& graph, const ir::Node& no
 
     const std::string inputName = valueVariable(graph, node.inputs[0]);
     const std::string outputName = valueVariable(graph, node.output);
-    emitTensorDeclaration(emitter, outputName, output.type);
+    if (!emitTensorDeclaration(emitter, outputName, output.type, diagnostics)) {
+        return false;
+    }
     emitter.emitLine("    " + outputName + ".data.resize(" + inputName + ".data.size());");
     emitter.emitLine("    for (std::size_t index = 0; index < " + outputName +
                      ".data.size(); ++index) {");
@@ -112,7 +160,13 @@ bool emitMatmul(SourceEmitter& emitter, const ir::Graph& graph, const ir::Node& 
     const std::size_t rows = output.type.dimensions[0];
     const std::size_t inner = left.type.dimensions[1];
     const std::size_t columns = output.type.dimensions[1];
-    emitTensorDeclaration(emitter, outputName, output.type);
+    if (!elementCount(left.type).has_value() || !elementCount(right.type).has_value()) {
+        diagnostics.reportError({1, 1}, "Matmul input shape is too large for generated indexing");
+        return false;
+    }
+    if (!emitTensorDeclaration(emitter, outputName, output.type, diagnostics)) {
+        return false;
+    }
     emitter.emitLine("    for (std::size_t row = 0; row < " + std::to_string(rows) +
                      "; ++row) {");
     emitter.emitLine("        for (std::size_t column = 0; column < " +
@@ -164,6 +218,10 @@ CppEmitter::CppEmitter(CodegenOptions options) : options_(std::move(options)) {}
 std::optional<std::string> CppEmitter::generate(
     const ir::Graph& graph, common::DiagnosticEngine& diagnostics) const {
     if (!graph.validate(diagnostics)) {
+        return std::nullopt;
+    }
+    if (!isIdentifier(options_.namespaceName)) {
+        diagnostics.reportError({1, 1}, "invalid C++ namespace name in code-generation options");
         return std::nullopt;
     }
 

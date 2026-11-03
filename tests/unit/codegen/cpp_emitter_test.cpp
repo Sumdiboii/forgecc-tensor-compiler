@@ -111,6 +111,15 @@ void testCppEmitterRejectsInvalidGraphs() {
     assert(diagnostics.hasErrors());
 }
 
+void testCppEmitterRejectsInvalidNamespaceNames() {
+    Graph graph;
+    CppEmitter emitter(CodegenOptions{"bad-namespace"});
+    DiagnosticEngine diagnostics;
+
+    assert(!emitter.generate(graph, diagnostics).has_value());
+    assert(diagnostics.hasErrors());
+}
+
 } // namespace
 
 void runCppEmitterTests() {
@@ -120,4 +129,5 @@ void runCppEmitterTests() {
     testCppEmitterUsesTopologicalOrderForChainedOperations();
     testCppEmitterRejectsIncompatibleMatmulShapes();
     testCppEmitterRejectsInvalidGraphs();
+    testCppEmitterRejectsInvalidNamespaceNames();
 }
