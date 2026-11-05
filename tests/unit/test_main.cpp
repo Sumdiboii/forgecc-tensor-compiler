@@ -14,6 +14,7 @@ void runSemanticAnalyzerTests();
 void runGraphTests();
 void runLowererTests();
 void runLoopIrTests();
+void runLoopLowererTests();
 void runPassManagerTests();
 void runDeadCodeEliminationTests();
 void runCommonSubexpressionEliminationTests();
@@ -33,6 +34,7 @@ int main() {
     runGraphTests();
     runLowererTests();
     runLoopIrTests();
+    runLoopLowererTests();
     runPassManagerTests();
     runDeadCodeEliminationTests();
     runCommonSubexpressionEliminationTests();

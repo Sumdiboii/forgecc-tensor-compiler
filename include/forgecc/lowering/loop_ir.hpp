@@ -39,14 +39,23 @@ enum class BinaryOperator {
     Divide,
 };
 
+enum class UnaryOperator {
+    Relu,
+};
+
 struct BinaryExpression {
     BinaryOperator operation;
     ExpressionPtr left;
     ExpressionPtr right;
 };
 
+struct UnaryExpression {
+    UnaryOperator operation;
+    ExpressionPtr operand;
+};
+
 struct Expression {
-    using Storage = std::variant<double, TensorElement, BinaryExpression>;
+    using Storage = std::variant<double, TensorElement, BinaryExpression, UnaryExpression>;
 
     Storage storage;
 
@@ -54,6 +63,7 @@ struct Expression {
     [[nodiscard]] static Expression tensorElement(TensorElement element);
     [[nodiscard]] static Expression binary(BinaryOperator operation, ExpressionPtr left,
                                            ExpressionPtr right);
+    [[nodiscard]] static Expression unary(UnaryOperator operation, ExpressionPtr operand);
 };
 
 struct StoreInstruction {

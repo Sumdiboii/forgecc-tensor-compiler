@@ -14,6 +14,7 @@ using forgecc::lowering::Index;
 using forgecc::lowering::Instruction;
 using forgecc::lowering::Loop;
 using forgecc::lowering::TensorElement;
+using forgecc::lowering::UnaryOperator;
 
 TensorElement element(const char* tensor, std::vector<Index> indices) {
     return TensorElement{tensor, std::move(indices)};
@@ -178,6 +179,29 @@ void testValidationRejectsInvalidBinaryOperator() {
     assert(diagnostics.hasErrors());
 }
 
+void testValidationRejectsMalformedUnaryExpressions() {
+    Block nullOperandBlock;
+    nullOperandBlock.appendStore(
+        element("A", {Index::constantValue(0)}),
+        std::make_unique<Expression>(Expression::unary(UnaryOperator::Relu, nullptr)));
+
+    DiagnosticEngine nullOperandDiagnostics;
+    assert(!nullOperandBlock.validate(nullOperandDiagnostics));
+    assert(nullOperandDiagnostics.hasErrors());
+
+    auto operand = std::make_unique<Expression>(Expression::constant(1.0));
+    Expression invalidOperator = Expression::unary(
+        static_cast<UnaryOperator>(99), std::move(operand));
+    Block invalidOperatorBlock;
+    invalidOperatorBlock.appendStore(
+        element("A", {Index::constantValue(0)}),
+        std::make_unique<Expression>(std::move(invalidOperator)));
+
+    DiagnosticEngine invalidOperatorDiagnostics;
+    assert(!invalidOperatorBlock.validate(invalidOperatorDiagnostics));
+    assert(invalidOperatorDiagnostics.hasErrors());
+}
+
 } // namespace
 
 void runLoopIrTests() {
@@ -191,4 +215,5 @@ void runLoopIrTests() {
     testLoopUsesExclusiveUpperBound();
     testValidationRecursesThroughNestedExpressionsAndLoops();
     testValidationRejectsInvalidBinaryOperator();
+    testValidationRejectsMalformedUnaryExpressions();
 }

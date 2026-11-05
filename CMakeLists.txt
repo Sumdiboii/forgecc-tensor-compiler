@@ -11,6 +11,7 @@ add_library(forgecc STATIC
     src/ir/graph.cpp
     src/lowering/lowerer.cpp
     src/lowering/loop_ir.cpp
+    src/lowering/loop_lowerer.cpp
     src/optimizer/pass_manager.cpp
     src/optimizer/dead_code_elimination.cpp
     src/optimizer/common_subexpression_elimination.cpp

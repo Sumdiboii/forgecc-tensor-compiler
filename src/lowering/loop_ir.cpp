@@ -49,6 +49,16 @@ bool validateBinaryOperator(BinaryOperator operation,
     return false;
 }
 
+bool validateUnaryOperator(UnaryOperator operation,
+                           common::DiagnosticEngine& diagnostics) {
+    if (operation == UnaryOperator::Relu) {
+        return true;
+    }
+
+    report(diagnostics, "invalid loop IR unary operator");
+    return false;
+}
+
 bool validateElement(const TensorElement& element, common::DiagnosticEngine& diagnostics) {
     bool valid = true;
     if (element.tensor.empty()) {
@@ -86,6 +96,14 @@ bool validateExpression(const Expression& expression, common::DiagnosticEngine& 
         }
         return valid;
     }
+    if (const auto* unary = std::get_if<UnaryExpression>(&expression.storage)) {
+        bool valid = validateUnaryOperator(unary->operation, diagnostics);
+        if (unary->operand == nullptr) {
+            report(diagnostics, "unary expression operand cannot be null");
+            return false;
+        }
+        return validateExpression(*unary->operand, diagnostics) && valid;
+    }
     return true;
 }
 
@@ -110,6 +128,10 @@ Expression Expression::tensorElement(TensorElement element) {
 Expression Expression::binary(BinaryOperator operation, ExpressionPtr left,
                               ExpressionPtr right) {
     return Expression{BinaryExpression{operation, std::move(left), std::move(right)}};
+}
+
+Expression Expression::unary(UnaryOperator operation, ExpressionPtr operand) {
+    return Expression{UnaryExpression{operation, std::move(operand)}};
 }
 
 Instruction Instruction::store(StoreInstruction instruction) {
