@@ -15,6 +15,7 @@ void runGraphTests();
 void runLowererTests();
 void runLoopIrTests();
 void runLoopLowererTests();
+void runMemoryPlanTests();
 void runPassManagerTests();
 void runDeadCodeEliminationTests();
 void runCommonSubexpressionEliminationTests();
@@ -35,6 +36,7 @@ int main() {
     runLowererTests();
     runLoopIrTests();
     runLoopLowererTests();
+    runMemoryPlanTests();
     runPassManagerTests();
     runDeadCodeEliminationTests();
     runCommonSubexpressionEliminationTests();
