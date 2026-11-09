@@ -1,7 +1,10 @@
 #include "forgecc/codegen/cpp_emitter.hpp"
 
+#include "forgecc/lowering/loop_lowerer.hpp"
+
 #include <cctype>
 #include <limits>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -198,6 +201,252 @@ bool emitNode(SourceEmitter& emitter, const ir::Graph& graph, const ir::Node& no
     return false;
 }
 
+std::string loopValueVariable(ir::ValueId valueId, bool isInput) {
+    return (isInput ? "input_" : "value_") + std::to_string(valueId);
+}
+
+struct LoopCodegenContext {
+    const lowering::LoopProgram& program;
+    common::DiagnosticEngine& diagnostics;
+    std::set<std::string> loopVariables;
+    std::set<ir::ValueId> inputValues;
+
+    [[nodiscard]] const semantic::TensorType* tensorType(std::string_view name) const {
+        for (const auto& [valueId, tensorName] : program.tensorNames) {
+            if (tensorName == name) {
+                const auto type = program.tensorTypes.find(valueId);
+                if (type != program.tensorTypes.end()) {
+                    return &type->second;
+                }
+            }
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] std::optional<ir::ValueId> tensorValue(std::string_view name) const {
+        for (const auto& [valueId, tensorName] : program.tensorNames) {
+            if (tensorName == name) {
+                return valueId;
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] bool isInput(ir::ValueId valueId) const {
+        return inputValues.contains(valueId);
+    }
+
+    [[nodiscard]] std::string variable(ir::ValueId valueId) const {
+        return loopValueVariable(valueId, isInput(valueId));
+    }
+
+    void report(std::string message) const {
+        diagnostics.reportError({1, 1}, std::move(message));
+    }
+};
+
+std::optional<std::string> emitLoopIndex(const lowering::Index& index,
+                                         LoopCodegenContext& context) {
+    switch (index.kind) {
+    case lowering::Index::Kind::Constant:
+        return std::to_string(index.constant);
+    case lowering::Index::Kind::IterationVariable:
+        if (!context.loopVariables.contains(index.variable)) {
+            context.report("tensor index uses an inactive loop variable");
+            return std::nullopt;
+        }
+        return index.variable;
+    }
+
+    context.report("invalid loop IR index kind");
+    return std::nullopt;
+}
+
+std::optional<std::string> emitTensorAccess(const lowering::TensorElement& element,
+                                            LoopCodegenContext& context) {
+    const auto valueId = context.tensorValue(element.tensor);
+    const auto* type = context.tensorType(element.tensor);
+    if (!valueId.has_value() || type == nullptr) {
+        context.report("loop IR refers to an unknown tensor '" + element.tensor + "'");
+        return std::nullopt;
+    }
+    if (element.indices.size() != type->dimensions.size()) {
+        context.report("tensor access has the wrong number of indices");
+        return std::nullopt;
+    }
+
+    std::string offset;
+    for (std::size_t index = 0; index < element.indices.size(); ++index) {
+        const auto indexExpression = emitLoopIndex(element.indices[index], context);
+        if (!indexExpression.has_value()) {
+            return std::nullopt;
+        }
+        std::size_t stride = 1;
+        for (std::size_t dimension = index + 1; dimension < type->dimensions.size();
+             ++dimension) {
+            if (type->dimensions[dimension] != 0 &&
+                stride > std::numeric_limits<std::size_t>::max() /
+                            type->dimensions[dimension]) {
+                context.report("tensor shape is too large for generated indexing");
+                return std::nullopt;
+            }
+            stride *= type->dimensions[dimension];
+        }
+
+        std::string term = "(" + *indexExpression + ")";
+        if (stride != 1) {
+            term += " * " + std::to_string(stride);
+        }
+        if (!offset.empty()) {
+            offset += " + ";
+        }
+        offset += term;
+    }
+    return context.variable(*valueId) + ".data[" + offset + "]";
+}
+
+std::optional<std::string> emitLoopExpression(const lowering::Expression& expression,
+                                              LoopCodegenContext& context) {
+    if (const auto* constant = std::get_if<double>(&expression.storage)) {
+        return std::to_string(*constant) + "F";
+    }
+    if (const auto* element = std::get_if<lowering::TensorElement>(&expression.storage)) {
+        return emitTensorAccess(*element, context);
+    }
+    if (const auto* binary = std::get_if<lowering::BinaryExpression>(&expression.storage)) {
+        if (binary->left == nullptr || binary->right == nullptr) {
+            context.report("binary expression operand cannot be null");
+            return std::nullopt;
+        }
+        const auto left = emitLoopExpression(*binary->left, context);
+        const auto right = emitLoopExpression(*binary->right, context);
+        if (!left.has_value() || !right.has_value()) {
+            return std::nullopt;
+        }
+        std::string operation;
+        switch (binary->operation) {
+        case lowering::BinaryOperator::Add:
+            operation = " + ";
+            break;
+        case lowering::BinaryOperator::Subtract:
+            operation = " - ";
+            break;
+        case lowering::BinaryOperator::Multiply:
+            operation = " * ";
+            break;
+        case lowering::BinaryOperator::Divide:
+            operation = " / ";
+            break;
+        default:
+            context.report("invalid loop IR binary operator");
+            return std::nullopt;
+        }
+        return "(" + *left + operation + *right + ")";
+    }
+    if (const auto* unary = std::get_if<lowering::UnaryExpression>(&expression.storage)) {
+        if (unary->operand == nullptr) {
+            context.report("unary expression operand cannot be null");
+            return std::nullopt;
+        }
+        if (unary->operation != lowering::UnaryOperator::Relu) {
+            context.report("invalid loop IR unary operator");
+            return std::nullopt;
+        }
+        const auto operand = emitLoopExpression(*unary->operand, context);
+        if (!operand.has_value()) {
+            return std::nullopt;
+        }
+        return "((" + *operand + ") > 0.0F ? (" + *operand + ") : 0.0F)";
+    }
+
+    context.report("unsupported loop IR expression");
+    return std::nullopt;
+}
+
+bool emitLoopBlock(SourceEmitter& emitter, const lowering::Block& block,
+                   LoopCodegenContext& context, std::size_t indentation) {
+    const std::string indent(indentation, ' ');
+    for (const lowering::Instruction& instruction : block.instructions) {
+        if (const auto* store = std::get_if<lowering::StoreInstruction>(&instruction.storage)) {
+            const auto target = emitTensorAccess(store->target, context);
+            if (!target.has_value() || store->value == nullptr) {
+                if (store->value == nullptr) {
+                    context.report("store expression cannot be null");
+                }
+                return false;
+            }
+            const auto output = context.tensorValue(store->target.tensor);
+            if (output.has_value() && context.isInput(*output)) {
+                context.report("loop IR cannot store into a graph input");
+                return false;
+            }
+            const auto value = emitLoopExpression(*store->value, context);
+            if (!value.has_value()) {
+                return false;
+            }
+            emitter.emitLine(indent + *target + " = " + *value + ";");
+            continue;
+        }
+
+        const auto* loop = std::get_if<lowering::LoopPtr>(&instruction.storage);
+        if (loop == nullptr || *loop == nullptr || (*loop)->step == 0) {
+            context.report("invalid loop instruction");
+            return false;
+        }
+        const lowering::Loop& loopValue = **loop;
+        if (loopValue.variable.empty() || context.loopVariables.contains(loopValue.variable)) {
+            context.report("invalid or duplicate loop iteration variable");
+            return false;
+        }
+        emitter.emitLine(indent + "for (std::size_t " + loopValue.variable + " = " +
+                         std::to_string(loopValue.start) + "; " + loopValue.variable + " < " +
+                         std::to_string(loopValue.bound) + "; " + loopValue.variable + " += " +
+                         std::to_string(loopValue.step) + ") {");
+        context.loopVariables.insert(loopValue.variable);
+        if (!emitLoopBlock(emitter, loopValue.body, context, indentation + 4)) {
+            return false;
+        }
+        context.loopVariables.erase(loopValue.variable);
+        emitter.emitLine(indent + "}");
+    }
+    return true;
+}
+
+bool validateLoopMetadata(const lowering::LoopProgram& program,
+                          LoopCodegenContext& context) {
+    if (program.tensorNames.size() != program.tensorTypes.size()) {
+        context.report("loop program tensor names and types do not match");
+        return false;
+    }
+    std::set<std::string> names;
+    for (const auto& [valueId, name] : program.tensorNames) {
+        if (name.empty() || !names.insert(name).second) {
+            context.report("loop program contains invalid or duplicate tensor names");
+            return false;
+        }
+        const auto type = program.tensorTypes.find(valueId);
+        if (type == program.tensorTypes.end() || !isF32(type->second) ||
+            type->second.dimensions.empty() || !elementCount(type->second).has_value()) {
+            context.report("loop program contains an unsupported or invalid tensor type");
+            return false;
+        }
+    }
+    for (ir::ValueId valueId : program.inputValues) {
+        if (!program.tensorNames.contains(valueId) || !program.tensorTypes.contains(valueId) ||
+            !context.inputValues.insert(valueId).second) {
+            context.report("loop program contains an invalid input value");
+            return false;
+        }
+    }
+    for (ir::ValueId valueId : program.outputValues) {
+        if (!program.tensorNames.contains(valueId) || !program.tensorTypes.contains(valueId)) {
+            context.report("loop program contains an invalid output value");
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 void SourceEmitter::emitLine(std::string_view line) {
@@ -283,6 +532,67 @@ std::optional<std::string> CppEmitter::generate(
     for (ir::ValueId output : graph.outputs()) {
         emitter.emitLine("    " + outputVariable(output) + " = " +
                          valueVariable(graph, output) + ";");
+    }
+    emitter.emitLine("}");
+    emitter.emitLine("}");
+    return emitter.str();
+}
+
+std::optional<std::string> CppEmitter::generate(
+    const lowering::LoopProgram& program, common::DiagnosticEngine& diagnostics) const {
+    if (!isIdentifier(options_.namespaceName)) {
+        diagnostics.reportError({1, 1}, "invalid C++ namespace name in code-generation options");
+        return std::nullopt;
+    }
+
+    LoopCodegenContext context{program, diagnostics};
+    if (!validateLoopMetadata(program, context) || !program.body.validate(diagnostics)) {
+        return std::nullopt;
+    }
+
+    SourceEmitter emitter;
+    emitter.emitLine("// Generated by ForgeCC.");
+    emitter.emitLine("#include <cstddef>");
+    emitter.emitLine("#include <vector>");
+    emitter.emitBlankLine();
+    emitter.emitLine("namespace " + options_.namespaceName + " {");
+    emitter.emitLine("struct Tensor {");
+    emitter.emitLine("    std::vector<float> data;");
+    emitter.emitLine("    std::vector<std::size_t> shape;");
+    emitter.emitLine("};");
+    emitter.emitBlankLine();
+
+    std::vector<std::string> parameters;
+    for (ir::ValueId valueId : program.inputValues) {
+        parameters.push_back("const Tensor& " + context.variable(valueId));
+    }
+    for (ir::ValueId valueId : program.outputValues) {
+        parameters.push_back("Tensor& output_" + std::to_string(valueId));
+    }
+    emitter.emitLine("void compute(" + [&parameters] {
+        std::string result;
+        for (std::size_t index = 0; index < parameters.size(); ++index) {
+            if (index != 0) {
+                result += ", ";
+            }
+            result += parameters[index];
+        }
+        return result;
+    }() + ") {");
+
+    for (const auto& [valueId, type] : program.tensorTypes) {
+        if (!context.isInput(valueId)) {
+            if (!emitTensorDeclaration(emitter, context.variable(valueId), type, diagnostics)) {
+                return std::nullopt;
+            }
+        }
+    }
+    if (!emitLoopBlock(emitter, program.body, context, 4)) {
+        return std::nullopt;
+    }
+    for (ir::ValueId valueId : program.outputValues) {
+        emitter.emitLine("    output_" + std::to_string(valueId) + " = " +
+                         context.variable(valueId) + ";");
     }
     emitter.emitLine("}");
     emitter.emitLine("}");

@@ -7,12 +7,16 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace forgecc::lowering {
 
 struct LoopProgram {
     Block body;
     std::map<ir::ValueId, std::string> tensorNames;
+    std::map<ir::ValueId, semantic::TensorType> tensorTypes;
+    std::vector<ir::ValueId> inputValues;
+    std::vector<ir::ValueId> outputValues;
 };
 
 class LoopLowerer {
