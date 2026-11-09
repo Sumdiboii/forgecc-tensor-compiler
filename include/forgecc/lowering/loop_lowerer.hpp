@@ -32,6 +32,8 @@ private:
                                  const LoopProgram& program, Block& body);
     [[nodiscard]] bool lowerMatmul(const ir::Graph& graph, const ir::Node& node,
                                    const LoopProgram& program, Block& body);
+    [[nodiscard]] bool lowerElementwiseBinary(const ir::Graph& graph, const ir::Node& node,
+                                              const LoopProgram& program, Block& body);
     [[nodiscard]] const std::string* tensorName(const LoopProgram& program,
                                                 ir::ValueId value) const;
     void reportError(std::string message);

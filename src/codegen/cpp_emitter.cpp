@@ -188,6 +188,56 @@ bool emitMatmul(SourceEmitter& emitter, const ir::Graph& graph, const ir::Node& 
     return true;
 }
 
+bool emitElementwiseBinary(SourceEmitter& emitter, const ir::Graph& graph,
+                           const ir::Node& node, common::DiagnosticEngine& diagnostics) {
+    const ir::Value& left = graph.value(node.inputs[0]);
+    const ir::Value& right = graph.value(node.inputs[1]);
+    const ir::Value& output = graph.value(node.output);
+    if (reportUnsupportedType(left.type, diagnostics) ||
+        reportUnsupportedType(right.type, diagnostics) ||
+        reportUnsupportedType(output.type, diagnostics)) {
+        return false;
+    }
+    if (left.type.dimensions.empty() || left.type.dimensions != right.type.dimensions ||
+        left.type.dimensions != output.type.dimensions) {
+        diagnostics.reportError({1, 1}, "elementwise binary tensor shapes are incompatible");
+        return false;
+    }
+
+    std::string operation;
+    switch (node.operation) {
+    case ir::OperationKind::Add:
+        operation = " + ";
+        break;
+    case ir::OperationKind::Subtract:
+        operation = " - ";
+        break;
+    case ir::OperationKind::Multiply:
+        operation = " * ";
+        break;
+    case ir::OperationKind::Divide:
+        operation = " / ";
+        break;
+    default:
+        diagnostics.reportError({1, 1}, "invalid elementwise binary operation");
+        return false;
+    }
+
+    const std::string leftName = valueVariable(graph, node.inputs[0]);
+    const std::string rightName = valueVariable(graph, node.inputs[1]);
+    const std::string outputName = valueVariable(graph, node.output);
+    if (!emitTensorDeclaration(emitter, outputName, output.type, diagnostics)) {
+        return false;
+    }
+
+    emitter.emitLine("    for (std::size_t index = 0; index < " + outputName +
+                     ".data.size(); ++index) {");
+    emitter.emitLine("        " + outputName + ".data[index] = " + leftName +
+                     ".data[index]" + operation + rightName + ".data[index];");
+    emitter.emitLine("    }");
+    return true;
+}
+
 bool emitNode(SourceEmitter& emitter, const ir::Graph& graph, const ir::Node& node,
               common::DiagnosticEngine& diagnostics) {
     switch (node.operation) {
@@ -195,6 +245,11 @@ bool emitNode(SourceEmitter& emitter, const ir::Graph& graph, const ir::Node& no
         return emitRelu(emitter, graph, node, diagnostics);
     case ir::OperationKind::Matmul:
         return emitMatmul(emitter, graph, node, diagnostics);
+    case ir::OperationKind::Add:
+    case ir::OperationKind::Subtract:
+    case ir::OperationKind::Multiply:
+    case ir::OperationKind::Divide:
+        return emitElementwiseBinary(emitter, graph, node, diagnostics);
     }
 
     diagnostics.reportError({1, 1}, "unsupported operation in C++ code generation");

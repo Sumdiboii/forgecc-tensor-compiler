@@ -120,6 +120,21 @@ void testCppEmitterRejectsInvalidNamespaceNames() {
     assert(diagnostics.hasErrors());
 }
 
+void testCppEmitterSupportsElementwiseBinaryOperations() {
+    Graph graph;
+    const auto left = graph.addInput("A", matrix());
+    const auto right = graph.addInput("B", matrix());
+    const auto node = graph.addNode(OperationKind::Add, {left, right}, matrix());
+    graph.addOutput(graph.node(node).output);
+    CppEmitter emitter;
+    DiagnosticEngine diagnostics;
+
+    const auto source = emitter.generate(graph, diagnostics);
+    assert(source.has_value());
+    assert(!diagnostics.hasErrors());
+    assert(source->find("input_0.data[index] + input_1.data[index]") != std::string::npos);
+}
+
 } // namespace
 
 void runCppEmitterTests() {
@@ -130,4 +145,5 @@ void runCppEmitterTests() {
     testCppEmitterRejectsIncompatibleMatmulShapes();
     testCppEmitterRejectsInvalidGraphs();
     testCppEmitterRejectsInvalidNamespaceNames();
+    testCppEmitterSupportsElementwiseBinaryOperations();
 }

@@ -80,9 +80,38 @@ std::optional<ir::ValueId> GraphLowerer::lowerExpression(
     case frontend::ExpressionKind::NumericLiteral:
         reportError(expression.location(), "numeric literals cannot be lowered to the tensor graph");
         return std::nullopt;
-    case frontend::ExpressionKind::Binary:
-        reportError(expression.location(), "binary expressions are not supported by the graph IR");
-        return std::nullopt;
+    case frontend::ExpressionKind::Binary: {
+        const auto& binary = static_cast<const frontend::BinaryExpression&>(expression);
+        const auto left = lowerExpression(*binary.left);
+        const auto right = lowerExpression(*binary.right);
+        if (!left.has_value() || !right.has_value()) {
+            return std::nullopt;
+        }
+
+        ir::OperationKind operation;
+        switch (binary.operation) {
+        case frontend::BinaryOperator::Add:
+            operation = ir::OperationKind::Add;
+            break;
+        case frontend::BinaryOperator::Subtract:
+            operation = ir::OperationKind::Subtract;
+            break;
+        case frontend::BinaryOperator::Multiply:
+            operation = ir::OperationKind::Multiply;
+            break;
+        case frontend::BinaryOperator::Divide:
+            operation = ir::OperationKind::Divide;
+            break;
+        }
+
+        const auto outputType = analyzer_->inferShape(expression);
+        if (!outputType.has_value()) {
+            reportError(expression.location(), "unable to infer binary expression shape");
+            return std::nullopt;
+        }
+        const ir::NodeId node = graph_.addNode(operation, {*left, *right}, *outputType);
+        return graph_.node(node).output;
+    }
     }
 
     return std::nullopt;

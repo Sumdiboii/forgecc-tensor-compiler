@@ -4,8 +4,10 @@
 #include "forgecc/lowering/lowerer.hpp"
 
 #include <cassert>
+#include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -83,6 +85,27 @@ void testSimpleReluAndMatmul() {
     }
 }
 
+void testBinaryExpressionsBecomeElementwiseNodes() {
+    const std::vector<std::pair<std::string_view, OperationKind>> cases = {
+        {"A + B", OperationKind::Add},
+        {"A - B", OperationKind::Subtract},
+        {"A * B", OperationKind::Multiply},
+        {"A / B", OperationKind::Divide},
+    };
+    for (const auto& [expression, operation] : cases) {
+        SemanticAnalyzer analyzer;
+        GraphLowerer lowerer;
+        const std::string source = "A: f32[2, 2]\nB: f32[2, 2]\nC = " +
+                                   std::string(expression) + "\n";
+        auto graph = lowerProgram(source, analyzer, lowerer);
+        assert(graph.has_value());
+        assert(graph->nodeCount() == 1);
+        assert(graph->node(0).operation == operation);
+        assert(graph->value(graph->node(0).output).type.dimensions ==
+               std::vector<std::size_t>({2, 2}));
+    }
+}
+
 void testInvalidInputFailsSafely() {
     auto program = parseProgram("A: f32[2]\nC = relu(A)");
     SemanticAnalyzer analyzer;
@@ -102,5 +125,6 @@ void runLowererTests() {
     testDeclarationsBecomeInputs();
     testNestedCallsBecomeConnectedNodes();
     testSimpleReluAndMatmul();
+    testBinaryExpressionsBecomeElementwiseNodes();
     testInvalidInputFailsSafely();
 }
