@@ -1,5 +1,6 @@
 #include <iostream>
 
+void runCommandLineTests();
 void runDiagnosticTests();
 void runSourceLocationTests();
 void runCppEmitterTests();
@@ -21,6 +22,7 @@ void runDeadCodeEliminationTests();
 void runCommonSubexpressionEliminationTests();
 
 int main() {
+    runCommandLineTests();
     runDiagnosticTests();
     runSourceLocationTests();
     runCppEmitterTests();

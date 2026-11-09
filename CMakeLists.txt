@@ -24,6 +24,18 @@ target_include_directories(forgecc PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 )
 
+add_library(forgecc_cli_support STATIC
+    src/cli/command_line.cpp
+    src/cli/source_file.cpp
+)
+target_include_directories(forgecc_cli_support PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+
+add_executable(forgecc_cli src/main.cpp)
+set_target_properties(forgecc_cli PROPERTIES OUTPUT_NAME forgecc)
+target_link_libraries(forgecc_cli PRIVATE forgecc forgecc_cli_support)
+
 option(FORGECC_BUILD_TESTS "Build ForgeCC tests" OFF)
 option(FORGECC_BUILD_BENCHMARKS "Build ForgeCC benchmarks" OFF)
 
