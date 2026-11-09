@@ -1,5 +1,6 @@
 #include "forgecc/driver/compiler.hpp"
 #include "forgecc/native/native_compiler.hpp"
+#include "forgecc/native/native_executor.hpp"
 
 #include <cassert>
 #include <filesystem>
@@ -98,6 +99,28 @@ void testDriverForwardsGeneratedSourceWithoutExecutingIt() {
     removeOutput(output);
 }
 
+void testNativeExecutorReportsProgramExitStatus() {
+    const auto output = std::filesystem::current_path() / "forgecc executor test";
+    removeOutput(output);
+
+    forgecc::native::NativeCompiler compiler;
+    const auto compilation = compiler.compile("int main() { return 7; }\n", output);
+    assert(compilation.success);
+
+    const auto execution = forgecc::native::NativeExecutor{}.execute(output);
+    assert(!execution.success);
+    assert(execution.exitCode == 7);
+    removeOutput(output);
+}
+
+void testNativeExecutorRejectsMissingExecutable() {
+    const auto execution = forgecc::native::NativeExecutor{}.execute(
+        std::filesystem::current_path() / "missing forgecc executable");
+    assert(!execution.success);
+    assert(execution.exitCode == -1);
+    assert(execution.output.find("does not exist") != std::string::npos);
+}
+
 } // namespace
 
 void runNativeCompilerTests() {
@@ -107,4 +130,6 @@ void runNativeCompilerTests() {
     testRejectsInvalidOutputPath();
     testDoesNotOverwriteExistingOutput();
     testDriverForwardsGeneratedSourceWithoutExecutingIt();
+    testNativeExecutorReportsProgramExitStatus();
+    testNativeExecutorRejectsMissingExecutable();
 }

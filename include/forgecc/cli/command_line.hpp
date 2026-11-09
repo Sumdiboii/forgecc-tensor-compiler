@@ -11,6 +11,7 @@ namespace forgecc::cli {
 
 struct CommandLineOptions {
     std::filesystem::path inputPath;
+    std::optional<std::filesystem::path> outputPath;
 };
 
 struct CommandLineParseResult {

@@ -17,6 +17,7 @@ add_library(forgecc STATIC
     src/memory/liveness.cpp
     src/memory/memory_plan.cpp
     src/native/native_compiler.cpp
+    src/native/native_executor.cpp
     src/optimizer/pass_manager.cpp
     src/optimizer/dead_code_elimination.cpp
     src/optimizer/common_subexpression_elimination.cpp

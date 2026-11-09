@@ -3,7 +3,9 @@
 #include "forgecc/driver/compiler.hpp"
 
 #include <iostream>
+#include <filesystem>
 #include <string_view>
+#include <unistd.h>
 #include <vector>
 
 int main(int argc, char* argv[]) {
@@ -27,7 +29,22 @@ int main(int argc, char* argv[]) {
     }
 
     forgecc::driver::CompilerDriver compiler(*source.source);
-    std::cout << "Loaded source file: " << compiler.source().path.string() << '\n';
-    std::cout << "Source loading complete; compilation is not implemented yet.\n";
+    std::filesystem::path outputPath;
+    if (commandLine.options->outputPath.has_value()) {
+        outputPath = *commandLine.options->outputPath;
+    } else {
+        outputPath = std::filesystem::current_path() /
+                     ("forgecc-" + compiler.source().path.stem().string() + "-" +
+                      std::to_string(static_cast<long long>(getpid())));
+    }
+
+    const auto result = compiler.compileAndRun(outputPath);
+    if (!result.success) {
+        std::cerr << "error: " << result.diagnostics;
+        return 1;
+    }
+
+    std::cout << result.output;
+    std::cout << "Generated and executed: " << result.executablePath.string() << '\n';
     return 0;
 }

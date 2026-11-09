@@ -18,6 +18,14 @@ void testValidCompileCommand() {
     assert(result.options->inputPath == std::filesystem::path("input.fcc"));
 }
 
+void testCompileCommandAcceptsOutputPath() {
+    const auto result = parseCommandLine({"forgecc", "compile", "input.fcc", "-o", "build/out"});
+
+    assert(result.succeeded());
+    assert(result.options->outputPath.has_value());
+    assert(*result.options->outputPath == std::filesystem::path("build/out"));
+}
+
 void testInvalidCommandLineArguments() {
     assert(!parseCommandLine({"forgecc"}).succeeded());
     assert(!parseCommandLine({"forgecc", "check", "input.fcc"}).succeeded());
@@ -61,6 +69,7 @@ void testEmptyAndMissingSourceFiles() {
 
 void runCommandLineTests() {
     testValidCompileCommand();
+    testCompileCommandAcceptsOutputPath();
     testInvalidCommandLineArguments();
     testSourceFileReading();
     testEmptyAndMissingSourceFiles();

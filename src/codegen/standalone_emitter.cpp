@@ -77,6 +77,7 @@ std::optional<std::string> StandaloneEmitter::generate(
         wrapper.emitLine("    for (std::size_t index = 0; index < " + inputVariable(valueId) +
                          ".data.size(); ++index) {");
         wrapper.emitLine("        " + inputVariable(valueId) + ".data[index] = " +
+                         "(index % 2 == 0 ? -1.0F : 1.0F) * " +
                          "static_cast<float>(index + 1);");
         wrapper.emitLine("    }");
     }
