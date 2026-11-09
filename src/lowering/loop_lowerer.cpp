@@ -79,7 +79,12 @@ bool LoopLowerer::buildTensorNames(const ir::Graph& graph, LoopProgram& program)
             return false;
         }
         program.tensorNames.emplace(id, std::move(name));
+        program.tensorTypes.emplace(id, value.type);
+        if (value.kind == ir::ValueKind::GraphInput) {
+            program.inputValues.push_back(id);
+        }
     }
+    program.outputValues = graph.outputs();
     return true;
 }
 

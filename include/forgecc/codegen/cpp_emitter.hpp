@@ -8,6 +8,10 @@
 #include <string>
 #include <string_view>
 
+namespace forgecc::lowering {
+struct LoopProgram;
+}
+
 namespace forgecc::codegen {
 
 class SourceEmitter {
@@ -27,6 +31,8 @@ public:
 
     [[nodiscard]] std::optional<std::string> generate(
         const ir::Graph& graph, common::DiagnosticEngine& diagnostics) const;
+    [[nodiscard]] std::optional<std::string> generate(
+        const lowering::LoopProgram& program, common::DiagnosticEngine& diagnostics) const;
 
 private:
     CodegenOptions options_;

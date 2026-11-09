@@ -4,6 +4,7 @@ void runCommandLineTests();
 void runDiagnosticTests();
 void runSourceLocationTests();
 void runCppEmitterTests();
+void runStandaloneEmitterTests();
 void runLexerTests();
 void runParserTests();
 void runPart2ParserTests();
@@ -27,6 +28,7 @@ int main() {
     runDiagnosticTests();
     runSourceLocationTests();
     runCppEmitterTests();
+    runStandaloneEmitterTests();
     runLexerTests();
     runParserTests();
     runPart2ParserTests();
