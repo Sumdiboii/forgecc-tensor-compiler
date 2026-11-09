@@ -5,6 +5,7 @@ project(ForgeCC VERSION 0.1.0 LANGUAGES CXX)
 add_library(forgecc STATIC
     src/common/diagnostic.cpp
     src/codegen/cpp_emitter.cpp
+    src/driver/compiler.cpp
     src/frontend/lexer.cpp
     src/frontend/parser.cpp
     src/frontend/semantic_analyzer.cpp
@@ -14,6 +15,7 @@ add_library(forgecc STATIC
     src/lowering/loop_lowerer.cpp
     src/memory/liveness.cpp
     src/memory/memory_plan.cpp
+    src/native/native_compiler.cpp
     src/optimizer/pass_manager.cpp
     src/optimizer/dead_code_elimination.cpp
     src/optimizer/common_subexpression_elimination.cpp

@@ -16,6 +16,7 @@ add_executable(forgecc_tests
     unit/lowering/loop_ir_test.cpp
     unit/lowering/loop_lowerer_test.cpp
     unit/memory/memory_plan_test.cpp
+    unit/native/native_compiler_test.cpp
     unit/optimizer/pass_manager_test.cpp
     unit/optimizer/dead_code_elimination_test.cpp
     unit/optimizer/common_subexpression_elimination_test.cpp
