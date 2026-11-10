@@ -68,7 +68,7 @@ void testReluWithNegativePositiveAndZeroValues() {
 void testMatrixMultiplicationAtMultipleSizes() {
     for (const auto [rows, shared, columns] :
          std::vector<std::tuple<std::size_t, std::size_t, std::size_t>>{
-             {2, 2, 2}, {1, 3, 2}, {2, 3, 1}}) {
+             {2, 2, 2}, {2, 3, 2}, {3, 2, 4}, {1, 3, 1}, {4, 3, 5}}) {
         const TensorReference left = forgecc::test::deterministicTensor({rows, shared});
         const TensorReference right = forgecc::test::deterministicTensor({shared, columns});
         const auto expected = forgecc::test::matmul(left, right);

@@ -36,3 +36,28 @@ shows percentage differences, observed time-per-work-unit, compilation time,
 source size, and executable size. It does not collect hardware counters
 automatically. On Linux systems where permissions allow it, `perf stat` can be
 run separately; counter availability depends on the host kernel and CPU.
+
+## Baseline matrix multiplication
+
+The current baseline computes `C = A × B` for `A[M, K]` and `B[K, N]` with
+three nested loops:
+
+```text
+for i in [0, M):
+  for j in [0, N):
+    C[i, j] = 0
+    for k in [0, K):
+      C[i, j] += A[i, k] * B[k, j]
+```
+
+Tensors use contiguous row-major storage. `A[i, k]` advances contiguously as
+`k` changes, and each output row of `C` is written across columns. In contrast,
+`B[k, j]` advances by one row stride as `k` changes while `j` remains fixed,
+so a column access is generally non-contiguous and can have poorer spatial
+locality. Repeated accesses to those columns may increase cache pressure as
+matrix sizes grow. These are expected access-pattern effects; this project
+does not claim cache-miss measurements unless hardware counters are collected
+separately.
+
+The baseline benchmark includes square and rectangular cases, including
+`2x3 × 3x2`, `3x2 × 2x4`, `1x3 × 3x1`, and `4x3 × 3x5`.
