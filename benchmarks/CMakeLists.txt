@@ -1,1 +1,2 @@
-# Benchmark targets will be added as runtime functionality becomes available.
+add_executable(forgecc_benchmarks cpu_benchmarks.cpp)
+target_link_libraries(forgecc_benchmarks PRIVATE forgecc)
