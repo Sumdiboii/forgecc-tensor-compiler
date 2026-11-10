@@ -19,6 +19,7 @@ add_executable(forgecc_tests
     unit/memory/memory_plan_test.cpp
     unit/native/native_compiler_test.cpp
     unit/native/end_to_end_test.cpp
+    unit/native/correctness_test.cpp
     unit/optimizer/pass_manager_test.cpp
     unit/optimizer/dead_code_elimination_test.cpp
     unit/optimizer/common_subexpression_elimination_test.cpp

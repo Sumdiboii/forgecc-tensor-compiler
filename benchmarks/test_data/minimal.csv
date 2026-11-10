@@ -1,0 +1,7 @@
+workload,implementation,dimensions,warmup_iterations,measurement_iterations,sample_index,sample_ns,average_ns,median_ns,min_ns,max_ns,compile_ms,source_bytes,executable_bytes,speedup_vs_baseline
+add-test,baseline,"[2]",1,2,0,10,15,15,10,20,1.5,100,200,1
+add-test,baseline,"[2]",1,2,1,20,15,15,10,20,1.5,100,200,1
+add-test,optimized,"[2]",1,2,0,12,18,18,12,24,1.5,100,200,0.833333
+add-test,optimized,"[2]",1,2,1,24,18,18,12,24,1.5,100,200,0.833333
+add-test,forgecc,"[2]",1,2,0,8,9,9,8,10,1.5,100,200,1.666667
+add-test,forgecc,"[2]",1,2,1,10,9,9,8,10,1.5,100,200,1.666667

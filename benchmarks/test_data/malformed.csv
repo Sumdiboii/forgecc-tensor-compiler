@@ -1,0 +1,2 @@
+workload,implementation,dimensions,warmup_iterations,measurement_iterations,sample_index,sample_ns,average_ns,median_ns,min_ns,max_ns,compile_ms,source_bytes,executable_bytes,speedup_vs_baseline
+add-test,baseline,"[2]",1,1,0,10,10,10,10,10,1.5,100,200,1
