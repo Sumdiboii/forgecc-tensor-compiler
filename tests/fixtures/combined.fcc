@@ -1,0 +1,4 @@
+A: f32[2, 2]
+B: f32[2, 2]
+bias: f32[2, 2]
+out = relu(matmul(A, B) + bias)

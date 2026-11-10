@@ -9,6 +9,10 @@ namespace forgecc::ir {
 enum class OperationKind {
     Relu,
     Matmul,
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
 };
 
 struct Node {

@@ -16,6 +16,14 @@ std::string operationName(OperationKind operation) {
         return "Relu";
     case OperationKind::Matmul:
         return "Matmul";
+    case OperationKind::Add:
+        return "Add";
+    case OperationKind::Subtract:
+        return "Subtract";
+    case OperationKind::Multiply:
+        return "Multiply";
+    case OperationKind::Divide:
+        return "Divide";
     }
 
     return "Unknown";
@@ -26,6 +34,11 @@ std::size_t expectedArity(OperationKind operation) {
     case OperationKind::Relu:
         return 1;
     case OperationKind::Matmul:
+        return 2;
+    case OperationKind::Add:
+    case OperationKind::Subtract:
+    case OperationKind::Multiply:
+    case OperationKind::Divide:
         return 2;
     }
 

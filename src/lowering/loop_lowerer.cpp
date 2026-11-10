@@ -33,6 +33,21 @@ bool sameType(const semantic::TensorType& left, const semantic::TensorType& righ
     return left.elementType == right.elementType && left.dimensions == right.dimensions;
 }
 
+BinaryOperator binaryOperator(OperationKind operation) {
+    switch (operation) {
+    case OperationKind::Add:
+        return BinaryOperator::Add;
+    case OperationKind::Subtract:
+        return BinaryOperator::Subtract;
+    case OperationKind::Multiply:
+        return BinaryOperator::Multiply;
+    case OperationKind::Divide:
+        return BinaryOperator::Divide;
+    default:
+        return BinaryOperator::Add;
+    }
+}
+
 } // namespace
 
 std::optional<LoopProgram> LoopLowerer::lower(const ir::Graph& graph) {
@@ -96,6 +111,11 @@ bool LoopLowerer::lowerNode(const ir::Graph& graph, ir::NodeId nodeId,
         return lowerRelu(graph, node, program, body);
     case OperationKind::Matmul:
         return lowerMatmul(graph, node, program, body);
+    case OperationKind::Add:
+    case OperationKind::Subtract:
+    case OperationKind::Multiply:
+    case OperationKind::Divide:
+        return lowerElementwiseBinary(graph, node, program, body);
     }
 
     reportError("unsupported graph operation");
@@ -222,6 +242,64 @@ bool LoopLowerer::lowerMatmul(const ir::Graph& graph, const ir::Node& node,
     middle->body.appendLoop(std::move(inner));
     outer->body.appendLoop(std::move(middle));
     body.appendLoop(std::move(outer));
+    return true;
+}
+
+bool LoopLowerer::lowerElementwiseBinary(const ir::Graph& graph, const ir::Node& node,
+                                         const LoopProgram& program, Block& body) {
+    if (node.inputs.size() != 2) {
+        reportError("elementwise binary node has incorrect input arity");
+        return false;
+    }
+
+    const ir::Value& left = graph.value(node.inputs[0]);
+    const ir::Value& right = graph.value(node.inputs[1]);
+    const ir::Value& output = graph.value(node.output);
+    if (left.type.elementType != semantic::ElementType::F32 ||
+        right.type.elementType != semantic::ElementType::F32 ||
+        output.type.elementType != semantic::ElementType::F32) {
+        reportError("elementwise binary lowering supports only f32 tensors");
+        return false;
+    }
+    if (!sameType(left.type, right.type) || !sameType(left.type, output.type) ||
+        left.type.dimensions.empty()) {
+        reportError("elementwise binary tensor types are incompatible");
+        return false;
+    }
+
+    const std::string* leftName = tensorName(program, node.inputs[0]);
+    const std::string* rightName = tensorName(program, node.inputs[1]);
+    const std::string* outputName = tensorName(program, node.output);
+    if (leftName == nullptr || rightName == nullptr || outputName == nullptr) {
+        reportError("elementwise binary node refers to an unmapped tensor value");
+        return false;
+    }
+
+    Block* current = &body;
+    std::vector<std::string> variables;
+    variables.reserve(left.type.dimensions.size());
+    for (std::size_t dimension = 0; dimension < left.type.dimensions.size(); ++dimension) {
+        variables.push_back("b" + std::to_string(dimension));
+        auto loop = std::make_unique<Loop>(Loop{variables.back(), 0,
+                                                left.type.dimensions[dimension], 1, {}});
+        current->appendLoop(std::move(loop));
+        auto* nested = std::get_if<LoopPtr>(&current->instructions.back().storage);
+        if (nested == nullptr || *nested == nullptr) {
+            reportError("failed to construct elementwise binary loop body");
+            return false;
+        }
+        current = &(*nested)->body;
+    }
+
+    std::vector<Index> indices;
+    indices.reserve(variables.size());
+    for (const std::string& variable : variables) {
+        indices.push_back(Index::iteration(variable));
+    }
+    current->appendStore(
+        TensorElement{*outputName, indices},
+        binary(binaryOperator(node.operation), tensorRead(*leftName, indices),
+               tensorRead(*rightName, indices)));
     return true;
 }
 
