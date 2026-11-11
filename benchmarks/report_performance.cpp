@@ -130,8 +130,46 @@ std::optional<Statistics> statistics(const ImplementationData& implementation) {
 }
 
 bool isImplementation(std::string_view implementation) {
-    return std::find(kImplementations.begin(), kImplementations.end(), implementation) !=
-           kImplementations.end();
+    if (std::find(kImplementations.begin(), kImplementations.end(), implementation) !=
+        kImplementations.end()) {
+        return true;
+    }
+    constexpr std::string_view prefix = "tiled-";
+    if (!implementation.starts_with(prefix)) {
+        return false;
+    }
+    const auto tileSize = parseSize(implementation.substr(prefix.size()));
+    return tileSize.has_value() && *tileSize != 0;
+}
+
+std::vector<std::string> tiledImplementations(const ReportData& report) {
+    std::map<std::string, bool> names;
+    for (const auto& [workloadName, workload] : report.workloads) {
+        static_cast<void>(workloadName);
+        for (const auto& [implementation, data] : workload.implementations) {
+            static_cast<void>(data);
+            if (implementation.starts_with("tiled-")) {
+                names.emplace(implementation, true);
+            }
+        }
+    }
+    std::vector<std::string> result;
+    result.reserve(names.size());
+    for (const auto& [name, present] : names) {
+        static_cast<void>(present);
+        result.push_back(name);
+    }
+    return result;
+}
+
+std::vector<std::string> reportImplementations(const ReportData& report) {
+    std::vector<std::string> result;
+    for (const std::string_view implementation : kImplementations) {
+        result.emplace_back(implementation);
+    }
+    const auto tiled = tiledImplementations(report);
+    result.insert(result.end(), tiled.begin(), tiled.end());
+    return result;
 }
 
 std::optional<std::vector<std::size_t>> parseDimensions(std::string_view text);
@@ -332,28 +370,175 @@ std::string performanceDifference(double baseline, double compared) {
 }
 
 void writeComparisonTable(std::ostream& output, const ReportData& report) {
+    const auto implementations = reportImplementations(report);
     output << "## Implementation comparison\n\n"
               "Speedup is baseline median divided by compared median; values above 1.0 are faster.\n\n"
-              "| Workload | Dimensions | Baseline median (ns) | Graph IR median (ns) | Loop IR median (ns) | Graph speedup | Loop speedup |\n"
-              "|---|---:|---:|---:|---:|---:|---:|\n";
-    for (const auto& [name, workload] : report.workloads) {
-        const double baseline = statistics(workload.implementations.at("baseline"))->median;
-        const double optimized = statistics(workload.implementations.at("optimized"))->median;
-        const double forgecc = statistics(workload.implementations.at("forgecc"))->median;
-        output << "| " << name << " | " << workload.dimensions << " | " << std::fixed
-               << std::setprecision(2) << baseline << " | " << optimized << " | " << forgecc
-               << " | " << baseline / optimized << " | " << baseline / forgecc << " |\n";
+              "| Workload | Dimensions |";
+    for (const std::string& implementation : implementations) {
+        output << " " << implementation << " median (ns) |";
     }
-    output << "\n| Workload | Graph IR difference vs baseline | Loop IR difference vs baseline |\n"
-              "|---|---:|---:|\n";
-    for (const auto& [name, workload] : report.workloads) {
-        const double baseline = statistics(workload.implementations.at("baseline"))->median;
-        const double optimized = statistics(workload.implementations.at("optimized"))->median;
-        const double forgecc = statistics(workload.implementations.at("forgecc"))->median;
-        output << "| " << name << " | " << performanceDifference(baseline, optimized) << " | "
-               << performanceDifference(baseline, forgecc) << " |\n";
+    output << "\n|---|---:|";
+    for (const std::string& implementation : implementations) {
+        static_cast<void>(implementation);
+        output << "---:|";
     }
     output << "\n";
+    for (const auto& [name, workload] : report.workloads) {
+        output << "| " << name << " | " << workload.dimensions << " |";
+        for (const std::string& implementation : implementations) {
+            const auto found = workload.implementations.find(implementation);
+            if (found == workload.implementations.end()) {
+                output << " unavailable |";
+            } else {
+                output << " " << std::fixed << std::setprecision(2)
+                       << statistics(found->second)->median << " |";
+            }
+        }
+        output << "\n";
+    }
+    output << "\n| Workload |";
+    for (const std::string& implementation : implementations) {
+        if (implementation != "baseline") {
+            output << " " << implementation << " difference vs baseline |";
+        }
+    }
+    output << "\n|---|";
+    for (const std::string& implementation : implementations) {
+        if (implementation != "baseline") {
+            output << "---:|";
+        }
+    }
+    output << "\n";
+    for (const auto& [name, workload] : report.workloads) {
+        const double baseline = statistics(workload.implementations.at("baseline"))->median;
+        output << "| " << name << " |";
+        for (const std::string& implementation : implementations) {
+            if (implementation == "baseline") {
+                continue;
+            }
+            const auto found = workload.implementations.find(implementation);
+            if (found == workload.implementations.end()) {
+                output << " unavailable |";
+            } else {
+                output << " " << performanceDifference(
+                                      baseline, statistics(found->second)->median)
+                       << " |";
+            }
+        }
+        output << "\n";
+    }
+    output << "\n";
+}
+
+std::optional<double> speedup(double reference, double candidate) {
+    if (candidate <= 0.0) {
+        return std::nullopt;
+    }
+    return reference / candidate;
+}
+
+std::string formatSpeedup(std::optional<double> value) {
+    if (!value.has_value()) {
+        return "n/a";
+    }
+    std::ostringstream result;
+    result << std::fixed << std::setprecision(3) << *value;
+    return result.str();
+}
+
+void writeOptimizationAnalysis(std::ostream& output, const ReportData& report) {
+    const auto implementations = reportImplementations(report);
+    output << "## Relative speedups\n\n"
+              "Speedup is reference median divided by candidate median; values above 1.0 are faster.\n\n"
+              "| Workload | Implementation | Median (ns) | Vs baseline | Vs Loop IR |\n"
+              "|---|---|---:|---:|---:|\n";
+    for (const auto& [name, workload] : report.workloads) {
+        const double baseline = statistics(workload.implementations.at("baseline"))->median;
+        const double loop = statistics(workload.implementations.at("forgecc"))->median;
+        for (const std::string& implementation : implementations) {
+            if (implementation == "baseline") {
+                continue;
+            }
+            const auto found = workload.implementations.find(implementation);
+            if (found == workload.implementations.end()) {
+                continue;
+            }
+            const double median = statistics(found->second)->median;
+            output << "| " << name << " | " << implementation << " | " << std::fixed
+                   << std::setprecision(2) << median << " | "
+                   << formatSpeedup(speedup(baseline, median)) << " | "
+                   << formatSpeedup(speedup(loop, median)) << " |\n";
+        }
+    }
+    output << "\n## Best implementation summary\n\n"
+              "Speedup is reference median divided by candidate median; values above 1.0 are faster.\n"
+              "The `forgecc` column is the baseline Loop IR implementation; tiled columns apply to matmul workloads.\n\n"
+              "| Workload | Baseline median (ns) | Loop IR median (ns) | Best implementation | Best tiled variant | Best vs baseline | Best vs Loop IR |\n"
+              "|---|---:|---:|---|---|---:|---:|\n";
+
+    std::size_t tiledWorkloads = 0;
+    std::size_t tiledWinsOverLoop = 0;
+    for (const auto& [name, workload] : report.workloads) {
+        const auto tiledNames = [&workload] {
+            std::vector<std::string> names;
+            for (const auto& [implementation, data] : workload.implementations) {
+                static_cast<void>(data);
+                if (implementation.starts_with("tiled-")) {
+                    names.push_back(implementation);
+                }
+            }
+            return names;
+        }();
+        if (!tiledNames.empty()) {
+            ++tiledWorkloads;
+        }
+
+        const double baseline = statistics(workload.implementations.at("baseline"))->median;
+        const double loop = statistics(workload.implementations.at("forgecc"))->median;
+        std::string bestImplementation = "baseline";
+        double bestMedian = baseline;
+        for (const std::string& implementation : implementations) {
+            const auto found = workload.implementations.find(implementation);
+            if (found == workload.implementations.end()) {
+                continue;
+            }
+            const double median = statistics(found->second)->median;
+            if (median < bestMedian) {
+                bestMedian = median;
+                bestImplementation = implementation;
+            }
+        }
+
+        std::string bestTiled = "n/a";
+        double bestTiledMedian = 0.0;
+        for (const std::string& implementation : tiledNames) {
+            const double median = statistics(workload.implementations.at(implementation))->median;
+            if (bestTiled == "n/a" || median < bestTiledMedian) {
+                bestTiled = implementation;
+                bestTiledMedian = median;
+            }
+        }
+        if (!tiledNames.empty() && bestTiledMedian < loop) {
+            ++tiledWinsOverLoop;
+        }
+
+        output << "| " << name << " | " << std::fixed << std::setprecision(2) << baseline
+               << " | " << loop << " | " << bestImplementation << " | " << bestTiled
+               << " | ";
+        const auto bestVsBaseline = speedup(baseline, bestMedian);
+        const auto bestVsLoop = speedup(loop, bestMedian);
+        output << formatSpeedup(bestVsBaseline) << " | " << formatSpeedup(bestVsLoop) << " |\n";
+    }
+    output << "\n";
+    if (tiledWorkloads == 0) {
+        output << "No tiled matmul workloads were present in the input CSV.\n\n";
+        return;
+    }
+    output << "Across " << tiledWorkloads << " matmul workloads, the best tested tiled variant "
+           << (tiledWinsOverLoop == tiledWorkloads ? "was faster than" : "was not faster than")
+           << " the baseline Loop IR for " << tiledWinsOverLoop
+           << " workload(s). This is a measured observation for this run, not a universal "
+              "tile-size recommendation.\n\n";
 }
 
 void writeScalingTable(std::ostream& output, const ReportData& report) {
@@ -363,9 +548,12 @@ void writeScalingTable(std::ostream& output, const ReportData& report) {
               "|---|---|---|---:|---:|---:|\n";
     for (const auto& [name, workload] : report.workloads) {
         const std::size_t work = workUnits(workload);
-        for (const std::string_view implementation : kImplementations) {
-            const double median = statistics(workload.implementations.at(std::string(implementation)))
-                                      ->median;
+        for (const std::string& implementation : reportImplementations(report)) {
+            const auto found = workload.implementations.find(implementation);
+            if (found == workload.implementations.end()) {
+                continue;
+            }
+            const double median = statistics(found->second)->median;
             output << "| " << name << " | " << implementation << " | " << workload.dimensions
                    << " | " << work << " | " << std::fixed << std::setprecision(2) << median
                    << " | " << (work == 0 ? 0.0 : median / static_cast<double>(work)) << " |\n";
@@ -398,13 +586,24 @@ bool writeReport(const std::filesystem::path& path, const std::filesystem::path&
     }
     output << "# ForgeCC Performance Report\n\n"
               "## Methodology\n\n"
-              "This report was generated from saved Phase 9.2 CSV measurements. Each workload\n"
+              "This report was generated from saved Phase 10.3 CSV measurements. Each workload\n"
               "uses the same deterministic inputs for the straightforward C++ baseline, the\n"
               "Graph IR implementation after the existing DCE/CSE passes, and the Loop IR\n"
-              "generated implementation. Warm-up calls are excluded from timing; median kernel\n"
-              "execution time is the primary comparison metric.\n\n"
+              "generated implementation, including tiled Loop IR variants for matmul. Warm-up\n"
+              "calls are excluded from timing; median kernel execution time is the primary\n"
+              "comparison metric. Compilation time is measured separately.\n\n"
            << "Input CSV: `" << input.string() << "`\n\n";
+    if (!report.workloads.empty()) {
+        const auto& firstWorkload = report.workloads.begin()->second;
+        const auto baseline = firstWorkload.implementations.find("baseline");
+        if (baseline != firstWorkload.implementations.end()) {
+            output << "Configured warmup iterations: " << baseline->second.warmupIterations
+                   << "; measured iterations: " << baseline->second.measurementIterations
+                   << ". Raw per-iteration samples are retained in the CSV.\n\n";
+        }
+    }
     writeComparisonTable(output, report);
+    writeOptimizationAnalysis(output, report);
     writeScalingTable(output, report);
     writeArtifactTable(output, report);
     output << "## Limitations\n\n"
@@ -417,10 +616,19 @@ bool writeReport(const std::filesystem::path& path, const std::filesystem::path&
               "  it can be used separately, for example: `perf stat -e cycles,instructions,cache-misses\n"
               "  ./build/benchmarks/forgecc_benchmarks ...`. Counter availability depends on\n"
               "  kernel permissions and the host CPU.\n\n"
+              "## Cache and locality interpretation\n\n"
+              "The baseline accesses `B[k, j]` with a row stride as the reduction index changes.\n"
+              "The tiled implementation reuses smaller row, column, and shared-dimension blocks,\n"
+              "and its innermost column loop accesses rows of `B` and `C` contiguously. This is\n"
+              "expected to improve spatial and temporal locality when a tile fits useful cache\n"
+              "levels, but this report contains timing measurements only. It does not measure L1,\n"
+              "L2, or L3 cache events.\n\n"
               "## Conclusions\n\n"
-              "The tables above report measured differences only. Explanations of scaling or\n"
-              "speedups should be treated as hypotheses until validated with additional runs\n"
-              "and, where available, hardware-counter measurements.\n";
+              "The tables above report measured differences only. Small workloads may remain faster\n"
+              "with the baseline because tiled-loop and boundary overhead dominates. Larger\n"
+              "workloads may benefit from cache blocking, but the best tile size is workload- and\n"
+              "machine-dependent. Additional repeated runs and hardware counters are needed to\n"
+              "separate locality effects from system noise.\n";
     return output.good();
 }
 

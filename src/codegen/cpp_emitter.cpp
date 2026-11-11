@@ -2,6 +2,7 @@
 
 #include "forgecc/lowering/loop_lowerer.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <limits>
 #include <set>
@@ -418,6 +419,88 @@ std::optional<std::string> emitLoopExpression(const lowering::Expression& expres
     return std::nullopt;
 }
 
+bool emitTiledMatmul(SourceEmitter& emitter,
+                     const lowering::TiledMatmulInstruction& instruction,
+                     LoopCodegenContext& context) {
+    const auto leftValue = context.tensorValue(instruction.leftTensor);
+    const auto rightValue = context.tensorValue(instruction.rightTensor);
+    const auto outputValue = context.tensorValue(instruction.outputTensor);
+    const auto* leftType = context.tensorType(instruction.leftTensor);
+    const auto* rightType = context.tensorType(instruction.rightTensor);
+    const auto* outputType = context.tensorType(instruction.outputTensor);
+    if (!leftValue.has_value() || !rightValue.has_value() || !outputValue.has_value() ||
+        leftType == nullptr || rightType == nullptr || outputType == nullptr) {
+        context.report("tiled matmul refers to an unknown tensor");
+        return false;
+    }
+    if (context.isInput(*outputValue) || leftType->elementType != semantic::ElementType::F32 ||
+        rightType->elementType != semantic::ElementType::F32 ||
+        outputType->elementType != semantic::ElementType::F32 ||
+        leftType->dimensions != std::vector<std::size_t>{instruction.rows, instruction.shared} ||
+        rightType->dimensions != std::vector<std::size_t>{instruction.shared,
+                                                           instruction.columns} ||
+        outputType->dimensions != std::vector<std::size_t>{instruction.rows,
+                                                            instruction.columns}) {
+        context.report("tiled matmul tensor types or shapes are incompatible");
+        return false;
+    }
+    if (instruction.tileSize == 0 ||
+        instruction.tileSize >
+            std::numeric_limits<std::size_t>::max() -
+                std::max(instruction.rows,
+                         std::max(instruction.shared, instruction.columns))) {
+        context.report("tiled matmul tile size is invalid");
+        return false;
+    }
+    if (!elementCount(*leftType).has_value() || !elementCount(*rightType).has_value() ||
+        !elementCount(*outputType).has_value()) {
+        context.report("tiled matmul tensor shape is too large");
+        return false;
+    }
+
+    const std::string left = context.variable(*leftValue);
+    const std::string right = context.variable(*rightValue);
+    const std::string output = context.variable(*outputValue);
+    const auto sizeLiteral = [](std::size_t value) {
+        return "static_cast<std::size_t>(" + std::to_string(value) + ")";
+    };
+    const std::string tile = sizeLiteral(instruction.tileSize);
+    const std::string rows = sizeLiteral(instruction.rows);
+    const std::string shared = sizeLiteral(instruction.shared);
+    const std::string columns = sizeLiteral(instruction.columns);
+
+    emitter.emitLine("    for (std::size_t row = 0; row < " + rows + "; ++row) {");
+    emitter.emitLine("        for (std::size_t column = 0; column < " + columns +
+                     "; ++column) {");
+    emitter.emitLine("            " + output + ".data[row * " + columns + " + column] = 0.0F;");
+    emitter.emitLine("        }");
+    emitter.emitLine("    }");
+    emitter.emitLine("    for (std::size_t tile_row = 0; tile_row < " + rows +
+                     "; tile_row += " + tile + ") {");
+    emitter.emitLine("        for (std::size_t tile_column = 0; tile_column < " + columns +
+                     "; tile_column += " + tile + ") {");
+    emitter.emitLine("            for (std::size_t tile_shared = 0; tile_shared < " + shared +
+                     "; tile_shared += " + tile + ") {");
+    emitter.emitLine("                for (std::size_t row = tile_row; row < std::min(tile_row + " +
+                     tile + ", " + rows + "); ++row) {");
+    emitter.emitLine(std::string("                    for (std::size_t inner = tile_shared; inner < ") +
+                     "std::min(tile_shared + " + tile + ", " + shared +"); ++inner) {");
+    emitter.emitLine("                        const float a = " + left + ".data[row * " + shared +
+                     " + inner];");
+    emitter.emitLine(std::string("                        for (std::size_t column = tile_column; column < ") +
+                     "std::min(tile_column + " + tile + ", " + columns +"); ++column) {");
+    emitter.emitLine("                            " + output + ".data[row * " + columns +
+                     " + column] += a * " + right + ".data[inner * " + columns +
+                     " + column];");
+    emitter.emitLine("                        }");
+    emitter.emitLine("                    }");
+    emitter.emitLine("                }");
+    emitter.emitLine("            }");
+    emitter.emitLine("        }");
+    emitter.emitLine("    }");
+    return true;
+}
+
 bool emitLoopBlock(SourceEmitter& emitter, const lowering::Block& block,
                    LoopCodegenContext& context, std::size_t indentation) {
     const std::string indent(indentation, ' ');
@@ -440,6 +523,18 @@ bool emitLoopBlock(SourceEmitter& emitter, const lowering::Block& block,
                 return false;
             }
             emitter.emitLine(indent + *target + " = " + *value + ";");
+            continue;
+        }
+
+        if (const auto* tiledMatmul =
+                std::get_if<lowering::TiledMatmulInstruction>(&instruction.storage)) {
+            if (indentation != 4) {
+                context.report("tiled matmul must be emitted at the top level of a loop program");
+                return false;
+            }
+            if (!emitTiledMatmul(emitter, *tiledMatmul, context)) {
+                return false;
+            }
             continue;
         }
 
@@ -607,6 +702,7 @@ std::optional<std::string> CppEmitter::generate(
 
     SourceEmitter emitter;
     emitter.emitLine("// Generated by ForgeCC.");
+    emitter.emitLine("#include <algorithm>");
     emitter.emitLine("#include <cstddef>");
     emitter.emitLine("#include <vector>");
     emitter.emitBlankLine();

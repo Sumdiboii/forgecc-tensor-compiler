@@ -17,7 +17,9 @@ using forgecc::lowering::Expression;
 using forgecc::lowering::Index;
 using forgecc::lowering::Loop;
 using forgecc::lowering::LoopLowerer;
+using forgecc::lowering::LoopLowererOptions;
 using forgecc::lowering::LoopProgram;
+using forgecc::lowering::TiledMatmulInstruction;
 using forgecc::lowering::UnaryExpression;
 
 forgecc::semantic::TensorType f32(std::vector<std::size_t> dimensions) {
@@ -212,6 +214,30 @@ void testLoweringRejectsUnsupportedOperationsAndNameCollisions() {
     assert(!lowerer.lower(duplicateNames).has_value());
 }
 
+void testTiledMatmulLoweringPreservesShapeAndMapping() {
+    LoopLowerer lowerer(LoopLowererOptions{2});
+    auto program = lowerer.lower(makeMatmulGraph());
+
+    assert(program.has_value());
+    assert(program->body.instructions.size() == 1);
+    const auto* tiled = std::get_if<TiledMatmulInstruction>(
+        &program->body.instructions.front().storage);
+    assert(tiled != nullptr);
+    assert(tiled->leftTensor == "A");
+    assert(tiled->rightTensor == "B");
+    assert(tiled->outputTensor == "C");
+    assert(tiled->rows == 2);
+    assert(tiled->shared == 3);
+    assert(tiled->columns == 4);
+    assert(tiled->tileSize == 2);
+}
+
+void testTiledMatmulRejectsZeroTileSize() {
+    LoopLowerer lowerer(LoopLowererOptions{0});
+    assert(!lowerer.lower(makeMatmulGraph()).has_value());
+    assert(lowerer.diagnostics().hasErrors());
+}
+
 } // namespace
 
 void runLoopLowererTests() {
@@ -220,4 +246,6 @@ void runLoopLowererTests() {
     testMultipleOperationsPreserveDependencyOrderAndMapping();
     testLoweringRejectsInvalidShapesAndGraphReferences();
     testLoweringRejectsUnsupportedOperationsAndNameCollisions();
+    testTiledMatmulLoweringPreservesShapeAndMapping();
+    testTiledMatmulRejectsZeroTileSize();
 }

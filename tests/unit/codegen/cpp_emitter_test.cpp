@@ -1,4 +1,5 @@
 #include "forgecc/codegen/cpp_emitter.hpp"
+#include "forgecc/lowering/loop_lowerer.hpp"
 
 #include <cassert>
 #include <string>
@@ -135,6 +136,33 @@ void testCppEmitterSupportsElementwiseBinaryOperations() {
     assert(source->find("input_0.data[index] + input_1.data[index]") != std::string::npos);
 }
 
+void testCppEmitterGeneratesTiledMatmul() {
+    Graph graph;
+    const auto left = graph.addInput("A", TensorType(ElementType::F32, {2, 3}));
+    const auto right = graph.addInput("B", TensorType(ElementType::F32, {3, 4}));
+    const auto node = graph.addNode(OperationKind::Matmul, {left, right},
+                                    TensorType(ElementType::F32, {2, 4}));
+    graph.setValueName(graph.node(node).output, "C");
+    graph.addOutput(graph.node(node).output);
+
+    forgecc::lowering::LoopLowerer lowerer({2});
+    const auto program = lowerer.lower(graph);
+    assert(program.has_value());
+    CppEmitter emitter(CodegenOptions{"tiled_test"});
+    DiagnosticEngine diagnostics;
+    const auto source = emitter.generate(*program, diagnostics);
+    assert(source.has_value());
+    assert(!diagnostics.hasErrors());
+    assert(source->find("#include <algorithm>") != std::string::npos);
+    assert(source->find("tile_row += static_cast<std::size_t>(2)") !=
+           std::string::npos);
+    assert(source->find("std::min(tile_row + static_cast<std::size_t>(2)") !=
+           std::string::npos);
+    assert(source->find("= 0.0F;") != std::string::npos);
+    assert(source->find("tile_shared") != std::string::npos);
+    assert(source == emitter.generate(*program, diagnostics));
+}
+
 } // namespace
 
 void runCppEmitterTests() {
@@ -146,4 +174,5 @@ void runCppEmitterTests() {
     testCppEmitterRejectsInvalidGraphs();
     testCppEmitterRejectsInvalidNamespaceNames();
     testCppEmitterSupportsElementwiseBinaryOperations();
+    testCppEmitterGeneratesTiledMatmul();
 }

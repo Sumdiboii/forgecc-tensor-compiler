@@ -1,5 +1,7 @@
 #include "forgecc/lowering/loop_lowerer.hpp"
 
+#include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace forgecc::lowering {
@@ -52,6 +54,11 @@ BinaryOperator binaryOperator(OperationKind operation) {
 
 std::optional<LoopProgram> LoopLowerer::lower(const ir::Graph& graph) {
     diagnostics_ = common::DiagnosticEngine{};
+
+    if (options_.matmulTileSize.has_value() && *options_.matmulTileSize == 0) {
+        reportError("matmul tile size must be greater than zero");
+        return std::nullopt;
+    }
 
     auto order = graph.topologicalOrder(diagnostics_);
     if (!order.has_value()) {
@@ -222,6 +229,10 @@ bool LoopLowerer::lowerMatmul(const ir::Graph& graph, const ir::Node& node,
         return false;
     }
 
+    if (options_.matmulTileSize.has_value()) {
+        return lowerTiledMatmul(graph, node, program, body);
+    }
+
     auto outer = std::make_unique<Loop>(Loop{"i", 0, left.type.dimensions[0], 1, {}});
     auto middle = std::make_unique<Loop>(Loop{"j", 0, right.type.dimensions[1], 1, {}});
     auto inner = std::make_unique<Loop>(Loop{"k", 0, left.type.dimensions[1], 1, {}});
@@ -242,6 +253,44 @@ bool LoopLowerer::lowerMatmul(const ir::Graph& graph, const ir::Node& node,
     middle->body.appendLoop(std::move(inner));
     outer->body.appendLoop(std::move(middle));
     body.appendLoop(std::move(outer));
+    return true;
+}
+
+bool LoopLowerer::lowerTiledMatmul(const ir::Graph& graph, const ir::Node& node,
+                                   const LoopProgram& program, Block& body) {
+    const auto tileSize = options_.matmulTileSize;
+    if (!tileSize.has_value() || *tileSize == 0) {
+        reportError("matmul tile size must be greater than zero");
+        return false;
+    }
+
+    const ir::Value& left = graph.value(node.inputs[0]);
+    const ir::Value& output = graph.value(node.output);
+    const std::size_t largestDimension =
+        std::max(left.type.dimensions[0],
+                 std::max(left.type.dimensions[1], output.type.dimensions[1]));
+    if (*tileSize > std::numeric_limits<std::size_t>::max() - largestDimension) {
+        reportError("matmul tile size is too large for generated loop bounds");
+        return false;
+    }
+
+    const std::string* leftName = tensorName(program, node.inputs[0]);
+    const std::string* rightName = tensorName(program, node.inputs[1]);
+    const std::string* outputName = tensorName(program, node.output);
+    if (leftName == nullptr || rightName == nullptr || outputName == nullptr) {
+        reportError("tiled matmul refers to an unmapped tensor value");
+        return false;
+    }
+
+    body.instructions.push_back(Instruction::tiledMatmul(TiledMatmulInstruction{
+        *leftName,
+        *rightName,
+        *outputName,
+        left.type.dimensions[0],
+        left.type.dimensions[1],
+        output.type.dimensions[1],
+        *tileSize,
+    }));
     return true;
 }
 
