@@ -10,8 +10,8 @@ cmake --build build --target forgecc_benchmarks
 Run it from the repository root:
 
 ```sh
-./build/benchmarks/forgecc_benchmarks --warmup 2 --iterations 7 \
-  --output benchmarks/results/cpu_benchmarks.csv
+./build/benchmarks/forgecc_benchmarks --warmup 5 --iterations 30 \
+  --output benchmarks/results/phase10_3_cpu_benchmarks.csv
 ```
 
 Generate a Markdown report from saved results without rerunning benchmarks:
@@ -19,16 +19,18 @@ Generate a Markdown report from saved results without rerunning benchmarks:
 ```sh
 cmake --build build --target forgecc_report
 ./build/benchmarks/forgecc_report \
-  --input benchmarks/results/cpu_benchmarks.csv \
-  --output benchmarks/results/performance_report.md
+  --input benchmarks/results/phase10_3_cpu_benchmarks.csv \
+  --output benchmarks/results/phase10_3_performance_report.md
 ```
 
 The benchmark reports CSV rows for a straightforward C++ baseline, the
-existing Graph IR emitter after DCE/CSE, and the Loop IR-generated
-implementation. Compilation time and generated artifact sizes are reported
-separately from the timed kernel calls. Each row retains one raw measured
-sample as well as the aggregate statistics. The default inputs are
-deterministic and the measured output is consumed through a checksum.
+existing Graph IR emitter after DCE/CSE, the baseline Loop IR-generated
+implementation, and tiled Loop IR variants for matmul. Compilation time and
+generated artifact sizes are reported separately from the timed kernel calls.
+Each row retains every raw measured sample as well as aggregate statistics.
+The default inputs are deterministic and the measured output is consumed
+through a checksum. The Phase 10.3 comparison uses five warm-up iterations
+and thirty measured iterations unless overridden on the command line.
 
 The report recomputes medians from the raw samples and defines speedup as
 `baseline median / compared median`; values above 1.0 are faster. It also

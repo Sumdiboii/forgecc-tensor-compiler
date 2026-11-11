@@ -39,8 +39,8 @@ using forgecc::semantic::ElementType;
 using forgecc::semantic::TensorType;
 
 struct Options {
-    std::size_t warmupIterations = 2;
-    std::size_t measuredIterations = 7;
+    std::size_t warmupIterations = 5;
+    std::size_t measuredIterations = 30;
     std::filesystem::path outputPath = "benchmarks/results/cpu_benchmarks.csv";
 };
 
@@ -388,6 +388,9 @@ std::vector<Workload> workloads() {
         {"matmul-8", WorkloadKind::Matmul, {8, 8}, {8, 8}},
         {"matmul-16", WorkloadKind::Matmul, {16, 16}, {16, 16}},
         {"matmul-32", WorkloadKind::Matmul, {32, 32}, {32, 32}},
+        {"matmul-64", WorkloadKind::Matmul, {64, 64}, {64, 64}},
+        {"matmul-128", WorkloadKind::Matmul, {128, 128}, {128, 128}},
+        {"matmul-64x96-96x80", WorkloadKind::Matmul, {64, 96}, {96, 80}},
     };
 }
 
