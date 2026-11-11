@@ -57,6 +57,12 @@ struct Workload {
     std::vector<std::size_t> rightShape;
 };
 
+struct LoopVariant {
+    std::string implementation;
+    std::string namespaceName;
+    std::string source;
+};
+
 struct SampleStatistics {
     double averageNanoseconds = 0.0;
     double medianNanoseconds = 0.0;
@@ -264,6 +270,7 @@ std::string timedBlock(std::string_view implementation, std::string_view functio
 
 std::string makeHarness(const Workload& workload, const Graph& graph,
                         std::string graphSource, std::string loopSource,
+                        const std::vector<LoopVariant>& tiledVariants,
                         std::size_t warmup, std::size_t iterations) {
     const ValueId outputId = graph.outputs().front();
     const TensorType& leftType = graph.value(0).type;
@@ -274,6 +281,9 @@ std::string makeHarness(const Workload& workload, const Graph& graph,
     const std::string baseline = baselineFunction(workload, outputType, outputId);
 
     std::string source = std::move(graphSource) + "\n" + std::move(loopSource) + "\n";
+    for (const LoopVariant& variant : tiledVariants) {
+        source += variant.source + "\n";
+    }
     source += "#include <chrono>\n#include <iostream>\n\n";
     source += baseline;
     source += "int main() {\n";
@@ -286,6 +296,11 @@ std::string makeHarness(const Workload& workload, const Graph& graph,
     source += timedBlock("forgecc", "forgecc_loop::compute", "loop", "forgecc_loop", workload,
                          leftType,
                          rightType, outputId, warmup, iterations);
+    for (const LoopVariant& variant : tiledVariants) {
+        source += timedBlock(variant.implementation, variant.namespaceName + "::compute",
+                             variant.namespaceName, variant.namespaceName, workload, leftType,
+                             rightType, outputId, warmup, iterations);
+    }
     source += "  return 0;\n}\n";
     return source;
 }
@@ -296,7 +311,8 @@ struct RawMeasurements {
 };
 
 std::optional<RawMeasurements> parseMeasurements(const std::string& output,
-                                                  std::size_t expectedIterations) {
+                                                  std::size_t expectedIterations,
+                                                  const std::vector<std::string>& implementations) {
     RawMeasurements measurements;
     std::istringstream lines(output);
     std::string line;
@@ -334,7 +350,7 @@ std::optional<RawMeasurements> parseMeasurements(const std::string& output,
         }
     }
 
-    for (const std::string implementation : {"baseline", "optimized", "forgecc"}) {
+    for (const std::string& implementation : implementations) {
         if (measurements.samples[implementation].size() != expectedIterations ||
             !measurements.checksums.contains(implementation)) {
             return std::nullopt;
@@ -439,8 +455,34 @@ std::optional<WorkloadResult> runWorkload(const Workload& workload, const Option
         return std::nullopt;
     }
 
+    std::vector<LoopVariant> tiledVariants;
+    const std::vector<std::size_t> tileSizes = workload.kind == WorkloadKind::Matmul
+                                                   ? std::vector<std::size_t>{8, 16, 32}
+                                                   : std::vector<std::size_t>{};
+    for (const std::size_t tileSize : tileSizes) {
+        const std::string namespaceName = "forgecc_tiled_" + std::to_string(tileSize);
+        forgecc::lowering::LoopLowerer tiledLowerer(
+            forgecc::lowering::LoopLowererOptions{tileSize});
+        auto tiledProgram = tiledLowerer.lower(optimizedGraph);
+        if (!tiledProgram.has_value()) {
+            std::cerr << "benchmark tiled loop lowering failed: " << workload.name
+                      << " tile=" << tileSize << '\n';
+            return std::nullopt;
+        }
+        forgecc::codegen::CppEmitter tiledEmitter({namespaceName});
+        auto tiledSource = tiledEmitter.generate(*tiledProgram, diagnostics);
+        if (!tiledSource.has_value()) {
+            std::cerr << "benchmark tiled loop code generation failed: " << workload.name
+                      << " tile=" << tileSize << '\n';
+            return std::nullopt;
+        }
+        tiledVariants.push_back(
+            {"tiled-" + std::to_string(tileSize), namespaceName, std::move(*tiledSource)});
+    }
+
     const std::string source = makeHarness(workload, optimizedGraph,
                                            std::move(*graphSource), std::move(*loopSource),
+                                           tiledVariants,
                                            options.warmupIterations, options.measuredIterations);
     const auto outputPath = std::filesystem::current_path() /
                             (".forgecc-benchmark-" + std::to_string(getpid()) + "-" +
@@ -464,7 +506,12 @@ std::optional<WorkloadResult> runWorkload(const Workload& workload, const Option
         std::cerr << execution.output;
         return std::nullopt;
     }
-    const auto measurements = parseMeasurements(execution.output, options.measuredIterations);
+    std::vector<std::string> implementations{"baseline", "optimized", "forgecc"};
+    for (const LoopVariant& variant : tiledVariants) {
+        implementations.push_back(variant.implementation);
+    }
+    const auto measurements =
+        parseMeasurements(execution.output, options.measuredIterations, implementations);
     if (!measurements.has_value()) {
         std::cerr << "benchmark output was malformed: " << workload.name << '\n';
         std::cerr << execution.output;
@@ -513,8 +560,7 @@ bool writeResults(const std::filesystem::path& path,
               "executable_bytes,speedup_vs_baseline\n";
     for (const WorkloadResult& result : results) {
         const double baseline = result.statistics.at("baseline").medianNanoseconds;
-        for (const std::string implementation : {"baseline", "optimized", "forgecc"}) {
-            const SampleStatistics& stats = result.statistics.at(implementation);
+        for (const auto& [implementation, stats] : result.statistics) {
             const auto& samples = result.samples.at(implementation);
             for (std::size_t sampleIndex = 0; sampleIndex < samples.size(); ++sampleIndex) {
                 output << result.workload << "," << implementation << ",\""

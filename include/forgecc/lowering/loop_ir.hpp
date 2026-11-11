@@ -71,16 +71,27 @@ struct StoreInstruction {
     ExpressionPtr value;
 };
 
+struct TiledMatmulInstruction {
+    std::string leftTensor;
+    std::string rightTensor;
+    std::string outputTensor;
+    std::size_t rows;
+    std::size_t shared;
+    std::size_t columns;
+    std::size_t tileSize;
+};
+
 struct Loop;
 using LoopPtr = std::unique_ptr<Loop>;
 
 struct Instruction {
-    using Storage = std::variant<StoreInstruction, LoopPtr>;
+    using Storage = std::variant<StoreInstruction, LoopPtr, TiledMatmulInstruction>;
 
     Storage storage;
 
     [[nodiscard]] static Instruction store(StoreInstruction instruction);
     [[nodiscard]] static Instruction loop(LoopPtr instruction);
+    [[nodiscard]] static Instruction tiledMatmul(TiledMatmulInstruction instruction);
 };
 
 struct Block {

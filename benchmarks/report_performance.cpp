@@ -130,8 +130,46 @@ std::optional<Statistics> statistics(const ImplementationData& implementation) {
 }
 
 bool isImplementation(std::string_view implementation) {
-    return std::find(kImplementations.begin(), kImplementations.end(), implementation) !=
-           kImplementations.end();
+    if (std::find(kImplementations.begin(), kImplementations.end(), implementation) !=
+        kImplementations.end()) {
+        return true;
+    }
+    constexpr std::string_view prefix = "tiled-";
+    if (!implementation.starts_with(prefix)) {
+        return false;
+    }
+    const auto tileSize = parseSize(implementation.substr(prefix.size()));
+    return tileSize.has_value() && *tileSize != 0;
+}
+
+std::vector<std::string> tiledImplementations(const ReportData& report) {
+    std::map<std::string, bool> names;
+    for (const auto& [workloadName, workload] : report.workloads) {
+        static_cast<void>(workloadName);
+        for (const auto& [implementation, data] : workload.implementations) {
+            static_cast<void>(data);
+            if (implementation.starts_with("tiled-")) {
+                names.emplace(implementation, true);
+            }
+        }
+    }
+    std::vector<std::string> result;
+    result.reserve(names.size());
+    for (const auto& [name, present] : names) {
+        static_cast<void>(present);
+        result.push_back(name);
+    }
+    return result;
+}
+
+std::vector<std::string> reportImplementations(const ReportData& report) {
+    std::vector<std::string> result;
+    for (const std::string_view implementation : kImplementations) {
+        result.emplace_back(implementation);
+    }
+    const auto tiled = tiledImplementations(report);
+    result.insert(result.end(), tiled.begin(), tiled.end());
+    return result;
 }
 
 std::optional<std::vector<std::size_t>> parseDimensions(std::string_view text);
@@ -332,26 +370,62 @@ std::string performanceDifference(double baseline, double compared) {
 }
 
 void writeComparisonTable(std::ostream& output, const ReportData& report) {
+    const auto implementations = reportImplementations(report);
     output << "## Implementation comparison\n\n"
               "Speedup is baseline median divided by compared median; values above 1.0 are faster.\n\n"
-              "| Workload | Dimensions | Baseline median (ns) | Graph IR median (ns) | Loop IR median (ns) | Graph speedup | Loop speedup |\n"
-              "|---|---:|---:|---:|---:|---:|---:|\n";
-    for (const auto& [name, workload] : report.workloads) {
-        const double baseline = statistics(workload.implementations.at("baseline"))->median;
-        const double optimized = statistics(workload.implementations.at("optimized"))->median;
-        const double forgecc = statistics(workload.implementations.at("forgecc"))->median;
-        output << "| " << name << " | " << workload.dimensions << " | " << std::fixed
-               << std::setprecision(2) << baseline << " | " << optimized << " | " << forgecc
-               << " | " << baseline / optimized << " | " << baseline / forgecc << " |\n";
+              "| Workload | Dimensions |";
+    for (const std::string& implementation : implementations) {
+        output << " " << implementation << " median (ns) |";
     }
-    output << "\n| Workload | Graph IR difference vs baseline | Loop IR difference vs baseline |\n"
-              "|---|---:|---:|\n";
+    output << "\n|---|---:|";
+    for (const std::string& implementation : implementations) {
+        static_cast<void>(implementation);
+        output << "---:|";
+    }
+    output << "\n";
+    for (const auto& [name, workload] : report.workloads) {
+        output << "| " << name << " | " << workload.dimensions << " |";
+        for (const std::string& implementation : implementations) {
+            const auto found = workload.implementations.find(implementation);
+            if (found == workload.implementations.end()) {
+                output << " unavailable |";
+            } else {
+                output << " " << std::fixed << std::setprecision(2)
+                       << statistics(found->second)->median << " |";
+            }
+        }
+        output << "\n";
+    }
+    output << "\n| Workload |";
+    for (const std::string& implementation : implementations) {
+        if (implementation != "baseline") {
+            output << " " << implementation << " difference vs baseline |";
+        }
+    }
+    output << "\n|---|";
+    for (const std::string& implementation : implementations) {
+        if (implementation != "baseline") {
+            output << "---:|";
+        }
+    }
+    output << "\n";
     for (const auto& [name, workload] : report.workloads) {
         const double baseline = statistics(workload.implementations.at("baseline"))->median;
-        const double optimized = statistics(workload.implementations.at("optimized"))->median;
-        const double forgecc = statistics(workload.implementations.at("forgecc"))->median;
-        output << "| " << name << " | " << performanceDifference(baseline, optimized) << " | "
-               << performanceDifference(baseline, forgecc) << " |\n";
+        output << "| " << name << " |";
+        for (const std::string& implementation : implementations) {
+            if (implementation == "baseline") {
+                continue;
+            }
+            const auto found = workload.implementations.find(implementation);
+            if (found == workload.implementations.end()) {
+                output << " unavailable |";
+            } else {
+                output << " " << performanceDifference(
+                                      baseline, statistics(found->second)->median)
+                       << " |";
+            }
+        }
+        output << "\n";
     }
     output << "\n";
 }
@@ -363,9 +437,12 @@ void writeScalingTable(std::ostream& output, const ReportData& report) {
               "|---|---|---|---:|---:|---:|\n";
     for (const auto& [name, workload] : report.workloads) {
         const std::size_t work = workUnits(workload);
-        for (const std::string_view implementation : kImplementations) {
-            const double median = statistics(workload.implementations.at(std::string(implementation)))
-                                      ->median;
+        for (const std::string& implementation : reportImplementations(report)) {
+            const auto found = workload.implementations.find(implementation);
+            if (found == workload.implementations.end()) {
+                continue;
+            }
+            const double median = statistics(found->second)->median;
             output << "| " << name << " | " << implementation << " | " << workload.dimensions
                    << " | " << work << " | " << std::fixed << std::setprecision(2) << median
                    << " | " << (work == 0 ? 0.0 : median / static_cast<double>(work)) << " |\n";

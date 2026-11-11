@@ -61,3 +61,19 @@ separately.
 
 The baseline benchmark includes square and rectangular cases, including
 `2x3 × 3x2`, `3x2 × 2x4`, `1x3 × 3x1`, and `4x3 × 3x5`.
+
+## Tiled matrix multiplication
+
+For matrix-multiplication workloads, the benchmark also emits opt-in tiled
+Loop IR variants with tile sizes 8, 16, and 32. Tiling partitions the row,
+column, and shared dimensions into smaller blocks. Within each block, the
+inner column loop advances contiguously through rows of `B` and `C`, while the
+tile boundaries use clipped bounds so rectangular and non-divisible shapes
+remain valid.
+
+The tile size controls the working-block dimensions. Small matrices may not
+benefit because loop and setup overhead dominates; excessively large tiles can
+also reduce locality. These are expectations about the access pattern, not
+claims of measured cache behavior. Tiled rows in the CSV are named
+`tiled-8`, `tiled-16`, and `tiled-32`, and their compilation and execution
+statistics are reported alongside the existing implementations.

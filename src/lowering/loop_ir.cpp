@@ -75,6 +75,25 @@ bool validateElement(const TensorElement& element, common::DiagnosticEngine& dia
     return valid;
 }
 
+bool validateTiledMatmul(const TiledMatmulInstruction& instruction,
+                         common::DiagnosticEngine& diagnostics) {
+    bool valid = true;
+    if (instruction.leftTensor.empty() || instruction.rightTensor.empty() ||
+        instruction.outputTensor.empty()) {
+        report(diagnostics, "tiled matmul tensor names cannot be empty");
+        valid = false;
+    }
+    if (instruction.rows == 0 || instruction.shared == 0 || instruction.columns == 0) {
+        report(diagnostics, "tiled matmul dimensions must be greater than zero");
+        valid = false;
+    }
+    if (instruction.tileSize == 0) {
+        report(diagnostics, "tiled matmul tile size must be greater than zero");
+        valid = false;
+    }
+    return valid;
+}
+
 bool validateExpression(const Expression& expression, common::DiagnosticEngine& diagnostics) {
     if (const auto* element = std::get_if<TensorElement>(&expression.storage)) {
         return validateElement(*element, diagnostics);
@@ -142,6 +161,10 @@ Instruction Instruction::loop(LoopPtr instruction) {
     return Instruction{std::move(instruction)};
 }
 
+Instruction Instruction::tiledMatmul(TiledMatmulInstruction instruction) {
+    return Instruction{std::move(instruction)};
+}
+
 void Block::appendStore(TensorElement target, ExpressionPtr value) {
     instructions.push_back(Instruction::store(StoreInstruction{std::move(target), std::move(value)}));
 }
@@ -165,6 +188,11 @@ bool Block::validate(common::DiagnosticEngine& diagnostics) const {
             }
         } else if (const auto* loop = std::get_if<LoopPtr>(&instruction.storage)) {
             if (*loop == nullptr || !(*loop)->validate(diagnostics)) {
+                valid = false;
+            }
+        } else if (const auto* tiledMatmul =
+                       std::get_if<TiledMatmulInstruction>(&instruction.storage)) {
+            if (!validateTiledMatmul(*tiledMatmul, diagnostics)) {
                 valid = false;
             }
         }
