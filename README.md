@@ -287,7 +287,14 @@ Raw measurements are available in [`phase10_3_cpu_benchmarks.csv`](benchmarks/re
 
 ---
 
+## Notice
+
+Built with the help of AI pair-programming to move faster on syntax, with all architecture, problem-solving, and final code decisions handled by me.
+
+---
+
 <p align="center">
   <strong>Sumdiboii</strong><br />
   <a href="https://www.linkedin.com/in/sumedh-pimplikar">LinkedIn</a>
 </p>
+
