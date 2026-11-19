@@ -3,6 +3,12 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit SHA or branch/tag to test
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -15,6 +21,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Install build tools
         run: |
