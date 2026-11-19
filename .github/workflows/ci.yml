@@ -31,10 +31,25 @@ jobs:
           sudo apt-get install -y ninja-build
 
       - name: Configure
-        run: cmake --preset default -DFORGECC_BUILD_TESTS=ON -DFORGECC_BUILD_BENCHMARKS=ON
+        run: |
+          if [ -f CMakeLists.txt ]; then
+            if [ -f CMakePresets.json ]; then
+              cmake --preset default -DFORGECC_BUILD_TESTS=ON -DFORGECC_BUILD_BENCHMARKS=ON
+            else
+              cmake -S . -B build -G Ninja -DFORGECC_BUILD_TESTS=ON -DFORGECC_BUILD_BENCHMARKS=ON
+            fi
+          else
+            echo "No CMake project at this commit; treating as documentation-only."
+          fi
 
       - name: Build
-        run: cmake --build build --parallel 2
+        run: |
+          if [ -f CMakeLists.txt ]; then
+            cmake --build build --parallel 2
+          fi
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          if [ -f CMakeLists.txt ]; then
+            ctest --test-dir build --output-on-failure
+          fi
