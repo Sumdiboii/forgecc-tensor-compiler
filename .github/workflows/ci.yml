@@ -1,4 +1,5 @@
 name: CI
+run-name: CI ${{ inputs.ref || github.sha }}
 
 on:
   push:
