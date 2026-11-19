@@ -9,6 +9,9 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/Sumdiboii/forgecc-tensor-compiler/actions/workflows/ci.yml">
+    <img src="https://github.com/Sumdiboii/forgecc-tensor-compiler/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  </a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20" />
   <img src="https://img.shields.io/badge/build-CMake-064F8C?logo=cmake&logoColor=white" alt="CMake" />
   <img src="https://img.shields.io/badge/platform-Linux-333333?logo=linux&logoColor=white" alt="Linux" />
